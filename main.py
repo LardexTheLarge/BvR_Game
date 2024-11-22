@@ -44,9 +44,9 @@ class Tower:
     def spawn_troop(self, troops, current_time):
         """Spawn a troop at intervals."""
         if current_time - self.last_spawn_time > SPAWN_INTERVAL:
-            x = self.rect.centerx - TROOP_SIZE // 2
+            x = self.rect.centerx
             # Adjust Y position based on whether it's an enemy or player tower
-            y = self.rect.top - TROOP_SIZE if self.is_enemy else self.rect.bottom
+            y = self.rect.bottom - TROOP_SIZE if self.is_enemy else self.rect.top
             direction = -1 if self.is_enemy else 1
             troops.append(Troop(x, y, direction, is_enemy=self.is_enemy))  # Add troop to correct list
             self.last_spawn_time = current_time
