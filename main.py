@@ -23,7 +23,7 @@ BLUE = (0, 0, 255)
 TOWER_SIZE = 50
 BASE_SIZE = 100
 TROOP_SIZE = 10
-TROOP_SPEED = 2
+TROOP_SPEED = 1
 SPAWN_INTERVAL = 2000  # in milliseconds
 MONEY_INCREMENT = 10
 
@@ -75,8 +75,19 @@ class Troop:
         self.health = 10
         self.size = TROOP_SIZE
 
-    def move(self):
-        self.y -= TROOP_SPEED * self.direction
+    def move(self, opposing_troops):
+        """Move the troop unless blocked by an opposing troop."""
+        next_y = self.y - TROOP_SPEED * self.direction
+        self_rect = self.get_rect()
+
+        # Check for collisions with opposing troops
+        for other in opposing_troops:
+            if self_rect.colliderect(other.get_rect()):
+                # If collision, stay in place
+                return
+
+        # No collision; move the troop
+        self.y = next_y
 
     def draw(self, screen):
         if self.is_enemy:
@@ -142,13 +153,19 @@ def main():
         for tower in enemy_towers:
             tower.spawn_troop(enemy_troops, current_time)  # Enemy troops spawn from enemy towers
 
-        # Troop Movement and Combat
-        for troop in player_troops + enemy_troops:
-            troop.move()
+        # Move player troops, checking for collisions with enemy troops
+        for player_troop in player_troops:
+            player_troop.move(enemy_troops)
 
+        # Move enemy troops, checking for collisions with player troops
+        for enemy_troop in enemy_troops:
+            enemy_troop.move(player_troops)
+
+        # Handle combat when troops collide
         for player_troop in player_troops:
             for enemy_troop in enemy_troops:
                 if player_troop.get_rect().colliderect(enemy_troop.get_rect()):
+                    # Reduce health for both troops
                     player_troop.health -= 1
                     enemy_troop.health -= 1
 
