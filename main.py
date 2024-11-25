@@ -114,21 +114,21 @@ def draw_ui(player_money, enemy_money):
     font = pygame.font.Font(None, 26)
     player_money_text = font.render(f"Player Money: ${player_money}", True, WHITE)
     enemy_money_text = font.render(f"Enemy Money: ${enemy_money}", True, WHITE)
-    screen.blit(player_money_text, (10, 10))
-    screen.blit(enemy_money_text, (10, 50))
+    screen.blit(player_money_text, (330, 780))
+    screen.blit(enemy_money_text, (10, 10))
 
 
 # Game Loop
 def main():
     player_towers = [
-        Tower(100, SCREEN_HEIGHT - 150),
-        Tower(300, SCREEN_HEIGHT - 150),
-        Base(SCREEN_WIDTH // 2 - BASE_SIZE // 2, SCREEN_HEIGHT - BASE_SIZE),
+        Tower(50, SCREEN_HEIGHT - 150),
+        Tower(400, SCREEN_HEIGHT - 150),
+        Base(SCREEN_WIDTH // 2 - BASE_SIZE // 4, SCREEN_HEIGHT - BASE_SIZE),
     ]
     enemy_towers = [
-        Tower(100, 100, is_enemy=True),
-        Tower(300, 100, is_enemy=True),
-        Base(SCREEN_WIDTH // 2 - BASE_SIZE // 2, 50, is_enemy=True),
+        Tower(50, 100, is_enemy=True),
+        Tower(400, 100, is_enemy=True),
+        Base(SCREEN_WIDTH // 2 - BASE_SIZE // 4, 50, is_enemy=True),
     ]
     player_troops = []
     enemy_troops = []
@@ -169,13 +169,14 @@ def main():
                     player_troop.health -= 1
                     enemy_troop.health -= 1
 
+        # Update money based on dead troops
+        player_money += len([troop for troop in enemy_troops if troop.health <= 0]) * MONEY_INCREMENT
+        enemy_money += len([troop for troop in player_troops if troop.health <= 0]) * MONEY_INCREMENT
+
         # Remove dead troops
         player_troops = [troop for troop in player_troops if troop.health > 0]
         enemy_troops = [troop for troop in enemy_troops if troop.health > 0]
 
-        # Update money
-        player_money += len([troop for troop in enemy_troops if troop.health <= 0]) * MONEY_INCREMENT
-        enemy_money += len([troop for troop in player_troops if troop.health <= 0]) * MONEY_INCREMENT
 
         # Draw everything
         for tower in player_towers + enemy_towers:
