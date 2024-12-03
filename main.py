@@ -79,9 +79,28 @@ class Base(Tower):  # Base extends Tower for simplicity
     def __init__(self, x, y, is_enemy=False):
         super().__init__(x, y, is_enemy)
         self.health = 200  # Bases have more health
+        self.max_health = 200  # For percentage calculation
+
+    def draw_health_bar(self, screen):
+        """Draw a health bar on top of the tower."""
+        bar_width = self.rect.width
+        bar_height = 8
+        health_percentage = self.health / self.max_health
+        green_width = int(bar_width * health_percentage)
+
+        # Bar position
+        bar_x = self.rect.x
+        bar_y = self.rect.y - bar_height - 5
+
+        # Draw background (red)
+        pygame.draw.rect(screen, RED, (bar_x, bar_y, bar_width, bar_height))
+        # Draw health (green)
+        pygame.draw.rect(screen, GREEN, (bar_x, bar_y, green_width, bar_height))
 
     def draw(self):
         pygame.draw.rect(screen, RED if self.is_enemy else BLUE, self.rect)
+        # Draw health bar
+        self.draw_health_bar(screen)
 
 
 class Troop:
@@ -93,6 +112,9 @@ class Troop:
         self.health = 10
         self.max_health = 10  # For calculating percentage
         self.size = TROOP_SIZE
+        self.attacking = False  # Whether the troop is attacking
+        self.attack_timer = 20  # Timer for the attack animation
+        self.attack_phase = "retreat"  # "back" for retreat, "forward" for attack
 
     def draw_health_bar(self, screen):
         """Draw a health bar above the troop."""
@@ -110,19 +132,39 @@ class Troop:
         # Draw health (green)
         pygame.draw.rect(screen, GREEN, (bar_x, bar_y, green_width, bar_height))
 
-    def move(self, opposing_troops):
-        """Move the troop unless blocked by an opposing troop."""
-        next_y = self.y - TROOP_SPEED * self.direction
-        self_rect = self.get_rect()
+    def move(self):
+        """Handle movement and attacking animation."""
+        if self.attacking:
+            print(f"Troop attacking. Phase: {self.attack_phase}, Timer: {self.attack_timer}")
+            # Perform attack animation
+            if self.attack_phase == "retreat":
+                self.y += TROOP_SPEED * self.direction
+                self.attack_timer -= 1
+                if self.attack_timer <= 0:
+                    self.attack_phase = "advance"
+                    self.attack_timer = 100  # Reset timer for the next phase
+            elif self.attack_phase == "advance":
+                self.y -= TROOP_SPEED * self.direction
+                self.attack_timer -= 1
+                if self.attack_timer <= 0:
+                    self.attack_phase = "retreat"
+                    self.attack_timer = 100  # Reset timer for the next phase
+        else:
+            # Regular movement when not attacking
+            self.y -= TROOP_SPEED * self.direction
 
-        # Check for collisions with opposing troops
-        for other in opposing_troops:
-            if self_rect.colliderect(other.get_rect()):
-                # If collision, stay in place
-                return
+    def start_attack(self):
+        """Start the attacking animation."""
+        if not self.attacking:  # Prevent re-initializing
+            self.attacking = True
+            self.attack_phase = "retreat"
+            self.attack_timer = 100  # Adjust for retreat duration
 
-        # No collision; move the troop
-        self.y = next_y
+    def stop_attack(self):
+        """Stop the attacking animation."""
+        self.attacking = False
+        self.attack_timer = 0
+        self.attack_phase = "retreat"  # Reset for the next attack
 
     def draw(self, screen):
         if self.is_enemy:
@@ -184,28 +226,48 @@ def main():
             if event.type == pygame.QUIT:
                 running = False
 
-        # Ensure correct troop lists are used for spawning
-        current_time = pygame.time.get_ticks()
         for tower in player_towers:
             tower.spawn_troop(player_troops, current_time)  # Player troops spawn from player towers
         for tower in enemy_towers:
             tower.spawn_troop(enemy_troops, current_time)  # Enemy troops spawn from enemy towers
 
+
         # Move player troops, checking for collisions with enemy troops
         for player_troop in player_troops:
-            player_troop.move(enemy_troops)
+            player_troop.move()
 
         # Move enemy troops, checking for collisions with player troops
         for enemy_troop in enemy_troops:
-            enemy_troop.move(player_troops)
+            enemy_troop.move()
 
-        # Handle combat when troops collide
+        # Example collision handling in game loop
         for player_troop in player_troops:
+            player_collision = False  # Tracks if this player troop is colliding with any enemy
             for enemy_troop in enemy_troops:
                 if player_troop.get_rect().colliderect(enemy_troop.get_rect()):
-                    # Reduce health for both troops
-                    player_troop.health -= 1
-                    enemy_troop.health -= 1
+                    player_collision = True
+                    # Stop movement and initiate attack
+                    player_troop.start_attack()
+                    enemy_troop.start_attack()
+
+                    # Reduce health
+                    player_troop.health -= 0.1
+                    enemy_troop.health -= 0.1
+                    
+            # Resume movement if no collisions occurred
+            if not player_collision:
+                player_troop.stop_attack()
+
+        for enemy_troop in enemy_troops:
+            enemy_collision = False  # Tracks if this enemy troop is colliding with any player
+            for player_troop in player_troops:
+                if enemy_troop.get_rect().colliderect(player_troop.get_rect()):
+                    enemy_collision = True
+
+            # Resume movement if no collisions occurred
+            if not enemy_collision:
+                enemy_troop.stop_attack()
+
 
         # Update money based on dead troops
         player_money += len([troop for troop in enemy_troops if troop.health <= 0]) * MONEY_INCREMENT
