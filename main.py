@@ -132,7 +132,7 @@ class Troop:
         # Draw health (green)
         pygame.draw.rect(screen, GREEN, (bar_x, bar_y, green_width, bar_height))
 
-    def move(self):
+    def move(self, allies):
         """Handle movement and attacking animation."""
         if self.attacking:
             print(f"Troop attacking. Phase: {self.attack_phase}, Timer: {self.attack_timer}")
@@ -151,7 +151,17 @@ class Troop:
                     self.attack_timer = 100  # Reset timer for the next phase
         else:
             # Regular movement when not attacking
+            self.avoid_allies(allies)
             self.y -= TROOP_SPEED * self.direction
+
+    def avoid_allies(self, allies):
+        """Adjust horizontal position to avoid overlapping with allies."""
+        for ally in allies:
+            if ally != self and self.get_rect().colliderect(ally.get_rect()):
+                if self.x < ally.x:
+                    self.x -= 1  # Move left to avoid collision
+                else:
+                    self.x += 1  # Move right to avoid collision
 
     def start_attack(self):
         """Start the attacking animation."""
@@ -234,11 +244,11 @@ def main():
 
         # Move player troops, checking for collisions with enemy troops
         for player_troop in player_troops:
-            player_troop.move()
+            player_troop.move(player_troops)
 
         # Move enemy troops, checking for collisions with player troops
         for enemy_troop in enemy_troops:
-            enemy_troop.move()
+            enemy_troop.move(enemy_troops)
 
         # Example collision handling in game loop
         for player_troop in player_troops:
