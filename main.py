@@ -32,8 +32,25 @@ class Tower:
     def __init__(self, x, y, is_enemy=False):
         self.rect = pygame.Rect(x, y, TOWER_SIZE, TOWER_SIZE)
         self.health = 100
+        self.max_health = 100  # For percentage calculation
         self.is_enemy = is_enemy
         self.last_spawn_time = pygame.time.get_ticks()  # Track last spawn time
+
+    def draw_health_bar(self, screen):
+        """Draw a health bar on top of the tower."""
+        bar_width = self.rect.width
+        bar_height = 8
+        health_percentage = self.health / self.max_health
+        green_width = int(bar_width * health_percentage)
+
+        # Bar position
+        bar_x = self.rect.x
+        bar_y = self.rect.y - bar_height - 5
+
+        # Draw background (red)
+        pygame.draw.rect(screen, RED, (bar_x, bar_y, bar_width, bar_height))
+        # Draw health (green)
+        pygame.draw.rect(screen, GREEN, (bar_x, bar_y, green_width, bar_height))
 
     def shoot(self, troops):
         """Damage any troop within the tower's range."""
@@ -54,7 +71,8 @@ class Tower:
     def draw(self):
         """Render the tower on the screen."""
         pygame.draw.rect(screen, RED if self.is_enemy else BLUE, self.rect)
-
+        # Draw health bar
+        self.draw_health_bar(screen)
 
 
 class Base(Tower):  # Base extends Tower for simplicity
@@ -73,7 +91,24 @@ class Troop:
         self.direction = direction
         self.is_enemy = is_enemy
         self.health = 10
+        self.max_health = 10  # For calculating percentage
         self.size = TROOP_SIZE
+
+    def draw_health_bar(self, screen):
+        """Draw a health bar above the troop."""
+        bar_width = self.size
+        bar_height = 5
+        health_percentage = self.health / self.max_health
+        green_width = int(bar_width * health_percentage)
+        
+        # Bar position
+        bar_x = self.x - bar_width // 2
+        bar_y = self.y - self.size // 2 - bar_height - 10
+
+        # Draw background (red)
+        pygame.draw.rect(screen, RED, (bar_x, bar_y, bar_width, bar_height))
+        # Draw health (green)
+        pygame.draw.rect(screen, GREEN, (bar_x, bar_y, green_width, bar_height))
 
     def move(self, opposing_troops):
         """Move the troop unless blocked by an opposing troop."""
@@ -99,6 +134,9 @@ class Troop:
             rect = pygame.Rect(self.x - self.size // 2, self.y - self.size // 2, self.size, self.size)
             pygame.draw.rect(screen, WHITE, rect.inflate(4, 4))  # Border
             pygame.draw.rect(screen, BLUE, rect)  # Inner
+
+        # Draw the health bar
+        self.draw_health_bar(screen)
     
     def get_rect(self):
         """Return a pygame.Rect for collision detection."""
