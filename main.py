@@ -34,7 +34,32 @@ class Tower:
         self.health = 100
         self.max_health = 100  # For percentage calculation
         self.is_enemy = is_enemy
+        self.spawn_interval = SPAWN_INTERVAL  # Instance-specific spawn interval
+        self.attack_power = 1    
         self.last_spawn_time = pygame.time.get_ticks()  # Track last spawn time
+        self.upgrades = {
+            "health": {"value": 50, "cost": 50},
+            "spawn_rate": {"value": -200, "cost": 100},  # Reduce spawn interval
+            "attack": {"value": 1, "cost": 75},
+        }
+    def apply_upgrade(self, upgrade, player_money):
+        """Apply an upgrade to this specific tower or base."""
+        if self.is_enemy:
+            return 0  # Do not allow upgrades for enemy towers
+
+        if upgrade == "health" and player_money >= self.upgrades["health"]["cost"]:
+            self.health = min(self.health + self.upgrades["health"]["value"], self.max_health)
+            return self.upgrades["health"]["cost"]
+
+        elif upgrade == "spawn_rate" and player_money >= self.upgrades["spawn_rate"]["cost"]:
+            self.spawn_interval = max(500, self.spawn_interval + self.upgrades["spawn_rate"]["value"])
+            return self.upgrades["spawn_rate"]["cost"]
+
+        elif upgrade == "attack" and player_money >= self.upgrades["attack"]["cost"]:
+            self.attack_power += self.upgrades["attack"]["value"]
+            return self.upgrades["attack"]["cost"]
+
+        return 0  # If upgrade is not applicable
 
     def draw_health_bar(self, screen):
         """Draw a health bar on top of the tower."""
@@ -59,13 +84,12 @@ class Tower:
                 troop.health -= 1
 
     def spawn_troop(self, troops, current_time):
-        """Spawn a troop at intervals."""
-        if current_time - self.last_spawn_time > SPAWN_INTERVAL:
+        """Spawn a troop at intervals specific to this tower."""
+        if current_time - self.last_spawn_time > self.spawn_interval:
             x = self.rect.centerx
-            # Adjust Y position based on whether it's an enemy or player tower
-            y = self.rect.bottom - TROOP_SIZE if self.is_enemy else self.rect.top
+            y = self.rect.top if not self.is_enemy else self.rect.bottom - TROOP_SIZE
             direction = -1 if self.is_enemy else 1
-            troops.append(Troop(x, y, direction, is_enemy=self.is_enemy))  # Add troop to correct list
+            troops.append(Troop(x, y, direction, self.is_enemy))
             self.last_spawn_time = current_time
 
     def draw(self):
@@ -81,21 +105,6 @@ class Base(Tower):  # Base extends Tower for simplicity
         self.health = 200  # Bases have more health
         self.max_health = 200  # For percentage calculation
 
-    def draw_health_bar(self, screen):
-        """Draw a health bar on top of the tower."""
-        bar_width = self.rect.width
-        bar_height = 8
-        health_percentage = self.health / self.max_health
-        green_width = int(bar_width * health_percentage)
-
-        # Bar position
-        bar_x = self.rect.x
-        bar_y = self.rect.y - bar_height - 5
-
-        # Draw background (red)
-        pygame.draw.rect(screen, RED, (bar_x, bar_y, bar_width, bar_height))
-        # Draw health (green)
-        pygame.draw.rect(screen, GREEN, (bar_x, bar_y, green_width, bar_height))
 
     def draw(self):
         pygame.draw.rect(screen, RED if self.is_enemy else BLUE, self.rect)
@@ -135,7 +144,6 @@ class Troop:
     def move(self, allies):
         """Handle movement and attacking animation."""
         if self.attacking:
-            print(f"Troop attacking. Phase: {self.attack_phase}, Timer: {self.attack_timer}")
             # Perform attack animation
             if self.attack_phase == "retreat":
                 self.y += TROOP_SPEED * self.direction
@@ -200,6 +208,34 @@ class Troop:
             return pygame.Rect(self.x - self.size // 2, self.y - self.size // 2, self.size, self.size)
 
 # Functions
+def upgrade_menu(screen, structure, player_money):
+    """Display upgrade options for a structure."""
+    menu_width = 150
+    menu_height = 100
+    menu_x = structure.rect.right - 5  # Display menu to the right of the structure
+    menu_y = structure.rect.top
+
+    # Draw menu background
+    pygame.draw.rect(screen, WHITE, (menu_x, menu_y, menu_width, menu_height))
+    pygame.draw.rect(screen, BLACK, (menu_x, menu_y, menu_width, menu_height), 2)
+
+    # Define upgrade options
+    font = pygame.font.Font(None, 20)
+    upgrades = [
+        {"name": "Health +50", "cost": 50, "action": "health"},
+        {"name": "Spawn Rate -10%", "cost": 100, "action": "spawn_rate"},
+        {"name": "Attack +1", "cost": 75, "action": "attack"},
+    ]
+
+    # Render upgrade options
+    for i, upgrade in enumerate(upgrades):
+        upgrade_text = f"{upgrade['name']} (${upgrade['cost']})"
+        text_surface = font.render(upgrade_text, True, BLACK)
+        screen.blit(text_surface, (menu_x + 10, menu_y + 10 + i * 25))
+
+    return upgrades, (menu_x, menu_y, menu_width, menu_height)
+
+
 def draw_ui(player_money, enemy_money):
     font = pygame.font.Font(None, 26)
     player_money_text = font.render(f"Player Money: ${player_money}", True, WHITE)
@@ -226,15 +262,49 @@ def main():
     player_money = 100
     enemy_money = 100
 
+    selected_structure = None  # Track currently hovered structure
+    menu_open = False          # Tracks if the menu is currently open
+    menu_rect = None           # Tracks the position of the active menu
+
     running = True
     while running:
         screen.fill(BLACK)
         current_time = pygame.time.get_ticks()
+        mouse_pos = pygame.mouse.get_pos()
+        mouse_pressed = pygame.mouse.get_pressed()
 
         # Event Handling
         for event in pygame.event.get():
             if event.type == pygame.QUIT:
                 running = False
+            if event.type == pygame.MOUSEBUTTONDOWN and event.button == 1:  # Left-click
+                if menu_open and menu_rect and not pygame.Rect(menu_rect).collidepoint(mouse_pos):
+                    # Close menu if clicking outside of it
+                    menu_open = False
+                    selected_structure = None
+
+        # Hover detection for friendly structures only
+        if not menu_open:  # Only detect hover when no menu is open
+            for structure in player_towers:  # Only friendly towers
+                if structure.rect.collidepoint(mouse_pos):
+                    selected_structure = structure
+                    menu_open = True
+                    break
+
+        # Display upgrade menu if a structure is selected
+        if selected_structure and menu_open:
+            upgrades, menu_rect = upgrade_menu(screen, selected_structure, player_money)
+
+            # Check for clicks on the upgrade menu
+            if mouse_pressed[0]:  # Left mouse button
+                for i, upgrade in enumerate(upgrades):
+                    option_rect = pygame.Rect(menu_rect[0], menu_rect[1] + i * 25 + 10, menu_rect[2], 20)
+                    if option_rect.collidepoint(mouse_pos):
+                        cost = selected_structure.apply_upgrade(upgrade["action"], player_money)
+                        if cost > 0:
+                            player_money -= cost
+                        menu_open = False  # Close menu after applying upgrade
+                        break
 
         for tower in player_towers:
             tower.spawn_troop(player_troops, current_time)  # Player troops spawn from player towers
