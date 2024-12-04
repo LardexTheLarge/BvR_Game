@@ -11,9 +11,11 @@ FPS = 60
 screen = pygame.display.set_mode((SCREEN_WIDTH, SCREEN_HEIGHT))
 pygame.display.set_caption("Blue vs Red")
 clock = pygame.time.Clock()
+font = pygame.font.Font(None, 26)
 
 # Colors
 WHITE = (255, 255, 255)
+BROWN = (150,75,0)
 BLACK = (0, 0, 0)
 RED = (255, 0, 0)
 GREEN = (0, 255, 0)
@@ -23,7 +25,7 @@ BLUE = (0, 0, 255)
 TOWER_SIZE = 50
 BASE_SIZE = 100
 TROOP_SIZE = 10
-TROOP_SPEED = 1
+TROOP_SPEED = .5
 SPAWN_INTERVAL = 2000  # in milliseconds
 MONEY_INCREMENT = 10
 
@@ -207,33 +209,52 @@ class Troop:
             # Return the rectangle directly for the player's troop
             return pygame.Rect(self.x - self.size // 2, self.y - self.size // 2, self.size, self.size)
 
+
+class Button:
+    def __init__(self, x, y, width, height, text, callback):
+        self.rect = pygame.Rect(x, y, width, height)
+        self.text = text
+        self.callback = callback
+
+    def draw(self, screen, font, color=WHITE, text_color=BLACK):
+        pygame.draw.rect(screen, color, self.rect)
+        pygame.draw.rect(screen, BLACK, self.rect, 2)
+        text_surface = font.render(self.text, True, text_color)
+        screen.blit(
+            text_surface,
+            (self.rect.centerx - text_surface.get_width() // 2,
+             self.rect.centery - text_surface.get_height() // 2)
+        )
+
+    def is_clicked(self, mouse_pos, mouse_pressed):
+        return self.rect.collidepoint(mouse_pos) and mouse_pressed[0]  # Left click
+
 # Functions
-def upgrade_menu(screen, structure, player_money):
-    """Display upgrade options for a structure."""
-    menu_width = 150
-    menu_height = 100
-    menu_x = structure.rect.right - 5  # Display menu to the right of the structure
-    menu_y = structure.rect.top
+def upgrade_menu(screen, upgrades, player_money):
+    """Display available upgrades dynamically."""
+    menu_x, menu_y = 150, 350
+    menu_width, menu_height = 200, len(upgrades) * 40 + 20
 
     # Draw menu background
     pygame.draw.rect(screen, WHITE, (menu_x, menu_y, menu_width, menu_height))
     pygame.draw.rect(screen, BLACK, (menu_x, menu_y, menu_width, menu_height), 2)
 
-    # Define upgrade options
-    font = pygame.font.Font(None, 20)
-    upgrades = [
-        {"name": "Health +50", "cost": 50, "action": "health"},
-        {"name": "Spawn Rate -10%", "cost": 100, "action": "spawn_rate"},
-        {"name": "Attack +1", "cost": 75, "action": "attack"},
-    ]
-
     # Render upgrade options
+    font = pygame.font.Font(None, 26)
     for i, upgrade in enumerate(upgrades):
         upgrade_text = f"{upgrade['name']} (${upgrade['cost']})"
         text_surface = font.render(upgrade_text, True, BLACK)
-        screen.blit(text_surface, (menu_x + 10, menu_y + 10 + i * 25))
+        option_rect = pygame.Rect(menu_x + 10, menu_y + 10 + i * 40, menu_width - 20, 30)
+        pygame.draw.rect(screen, GREEN if player_money >= upgrade['cost'] else RED, option_rect)
+        pygame.draw.rect(screen, BLACK, option_rect, 2)
+        screen.blit(
+            text_surface,
+            (option_rect.centerx - text_surface.get_width() // 2,
+             option_rect.centery - text_surface.get_height() // 2)
+        )
 
-    return upgrades, (menu_x, menu_y, menu_width, menu_height)
+    return [(pygame.Rect(menu_x + 10, menu_y + 10 + i * 40, menu_width - 20, 30), upgrade)
+            for i, upgrade in enumerate(upgrades)]
 
 
 def draw_ui(player_money, enemy_money):
@@ -262,13 +283,19 @@ def main():
     player_money = 100
     enemy_money = 100
 
-    selected_structure = None  # Track currently hovered structure
-    menu_open = False          # Tracks if the menu is currently open
-    menu_rect = None           # Tracks the position of the active menu
+    buttons = [
+        Button(10, 250, 30, 30, "T1", lambda: "tower1"),
+        Button(10, 300, 30, 30, "T2", lambda: "tower2"),
+        Button(10, 350, 30, 30, "Trp", lambda: "troops"),
+        Button(10, 400, 30, 30, "B", lambda: "base"),
+    ]
+
+    selected_entity = None  # Currently selected upgradeable entity
+    upgrade_options = []    # Options for the selected entity        # Tracks the position of the active menu
 
     running = True
     while running:
-        screen.fill(BLACK)
+        screen.fill(BROWN)
         current_time = pygame.time.get_ticks()
         mouse_pos = pygame.mouse.get_pos()
         mouse_pressed = pygame.mouse.get_pressed()
@@ -277,34 +304,53 @@ def main():
         for event in pygame.event.get():
             if event.type == pygame.QUIT:
                 running = False
-            if event.type == pygame.MOUSEBUTTONDOWN and event.button == 1:  # Left-click
-                if menu_open and menu_rect and not pygame.Rect(menu_rect).collidepoint(mouse_pos):
-                    # Close menu if clicking outside of it
-                    menu_open = False
-                    selected_structure = None
 
-        # Hover detection for friendly structures only
-        if not menu_open:  # Only detect hover when no menu is open
-            for structure in player_towers:  # Only friendly towers
-                if structure.rect.collidepoint(mouse_pos):
-                    selected_structure = structure
-                    menu_open = True
-                    break
+        # Handle button clicks
+        for button in buttons:
+            if button.is_clicked(mouse_pos, mouse_pressed):
+                selected_entity = button.callback()  # Select the corresponding entity
+                # Set upgrade options based on the selected entity
+                if selected_entity == "tower1":
+                    upgrade_options = player_towers[0].upgrades
+                elif selected_entity == "tower2":
+                    upgrade_options = player_towers[1].upgrades
+                elif selected_entity == "troops":
+                    upgrade_options = [
+                        {"name": "Health +10", "cost": 50, "action": "health"},
+                        {"name": "Spd +0.1", "cost": 75, "action": "speed"},
+                        {"name": "Dmg +1", "cost": 100, "action": "damage"},
+                    ]
+                elif selected_entity == "base":
+                    upgrade_options = player_towers[2].upgrades
 
-        # Display upgrade menu if a structure is selected
-        if selected_structure and menu_open:
-            upgrades, menu_rect = upgrade_menu(screen, selected_structure, player_money)
+        # Draw buttons
+        for button in buttons:
+            button.draw(screen, font)
 
-            # Check for clicks on the upgrade menu
-            if mouse_pressed[0]:  # Left mouse button
-                for i, upgrade in enumerate(upgrades):
-                    option_rect = pygame.Rect(menu_rect[0], menu_rect[1] + i * 25 + 10, menu_rect[2], 20)
+        # Display the upgrade menu for the selected entity
+        if selected_entity:
+            options_rects = upgrade_menu(screen, upgrade_options, player_money)
+
+            # Handle menu interactions
+            if mouse_pressed[0]:  # Left click
+                for option_rect, upgrade in options_rects:
                     if option_rect.collidepoint(mouse_pos):
-                        cost = selected_structure.apply_upgrade(upgrade["action"], player_money)
-                        if cost > 0:
-                            player_money -= cost
-                        menu_open = False  # Close menu after applying upgrade
-                        break
+                        # Apply upgrade logic here
+                        if selected_entity.startswith("tower"):
+                            tower_index = int(selected_entity[-1]) - 1
+                            cost = player_towers[tower_index].apply_upgrade(upgrade["action"], player_money)
+                            if cost > 0:
+                                player_money -= cost
+                        elif selected_entity == "troops":
+                            if upgrade["action"] == "health" and player_money >= upgrade["cost"]:
+                                TROOP_HEALTH += 10
+                                player_money -= upgrade["cost"]
+                            elif upgrade["action"] == "speed" and player_money >= upgrade["cost"]:
+                                TROOP_SPEED += 0.1
+                                player_money -= upgrade["cost"]
+                            elif upgrade["action"] == "damage" and player_money >= upgrade["cost"]:
+                                TROOP_DAMAGE += 1
+                                player_money -= upgrade["cost"]
 
         for tower in player_towers:
             tower.spawn_troop(player_troops, current_time)  # Player troops spawn from player towers
