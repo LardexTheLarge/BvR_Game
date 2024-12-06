@@ -26,6 +26,8 @@ TOWER_SIZE = 50
 BASE_SIZE = 100
 TROOP_SIZE = 10
 TROOP_SPEED = .5
+TROOP_HEALTH = 10
+TROOP_DAMAGE = .1
 SPAWN_INTERVAL = 2000  # in milliseconds
 MONEY_INCREMENT = 10
 
@@ -120,8 +122,8 @@ class Troop:
         self.y = y
         self.direction = direction
         self.is_enemy = is_enemy
-        self.health = 10
-        self.max_health = 10  # For calculating percentage
+        self.health = TROOP_HEALTH
+        self.max_health = TROOP_HEALTH  # For calculating percentage
         self.size = TROOP_SIZE
         self.attacking = False  # Whether the troop is attacking
         self.attack_timer = 20  # Timer for the attack animation
@@ -229,6 +231,77 @@ class Button:
     def is_clicked(self, mouse_pos, mouse_pressed):
         return self.rect.collidepoint(mouse_pos) and mouse_pressed[0]  # Left click
 
+
+class Upgrade:
+    def __init__(self, name, cost, effect, target, action):
+        """
+        Represents a single upgrade.
+        :param name: Name of the upgrade (e.g., "Health +50").
+        :param cost: Cost of the upgrade.
+        :param effect: Effect description or value (for UI purposes).
+        :param target: The entity this upgrade applies to (e.g., "Tower", "Troop").
+        :param action: A callable function that implements the upgrade logic.
+        """
+        self.name = name
+        self.cost = cost
+        self.effect = effect
+        self.target = target
+        self.action = action  # A function to apply the upgrade
+
+
+class UpgradeSystem:
+    def __init__(self):
+        self.upgrades = {}  # Dictionary of upgrades by entity
+        self.troop_stats = {
+            "health": TROOP_HEALTH,  # Default troop health
+            "speed": TROOP_SPEED,  # Default troop speed
+            "damage": .1,   # Default troop damage
+        }
+
+    def add_upgrade(self, entity_name, upgrade):
+        """
+        Add an upgrade to a specific entity.
+        :param entity_name: The name of the entity (e.g., "Tower1", "Troops").
+        :param upgrade: An Upgrade object to be added.
+        """
+        if entity_name not in self.upgrades:
+            self.upgrades[entity_name] = []
+        self.upgrades[entity_name].append(upgrade)
+
+    def get_upgrades(self, entity_name):
+        """
+        Get all upgrades available for a specific entity.
+        :param entity_name: The name of the entity.
+        :return: List of upgrades for the entity.
+        """
+        return self.upgrades.get(entity_name, [])
+
+    def apply_upgrade(self, upgrade, player_money):
+        """
+        Apply a selected upgrade if the player has enough money.
+        :param upgrade: The selected Upgrade object.
+        :param player_money: The player's current money.
+        :return: Updated player money after applying the upgrade.
+        """
+        if player_money >= upgrade.cost:
+            print(f"Applying upgrade: {upgrade.name}")
+
+            if upgrade.target == "Troops":
+                self._apply_troop_upgrade(upgrade.action)  # Apply troop upgrade
+            else:
+                upgrade.action()  # Apply specific entity upgrade
+            return player_money - upgrade.cost
+        return player_money
+    
+    def _apply_troop_upgrade(self, action):
+        """Apply a troop-specific upgrade."""
+        if action == "health":
+            self.troop_stats["health"] += 10
+        elif action == "speed":
+            self.troop_stats["speed"] += 0.1
+        elif action == "damage":
+            self.troop_stats["damage"] += 1
+
 # Functions
 def upgrade_menu(screen, upgrades, player_money):
     """Display available upgrades dynamically."""
@@ -242,10 +315,10 @@ def upgrade_menu(screen, upgrades, player_money):
     # Render upgrade options
     font = pygame.font.Font(None, 26)
     for i, upgrade in enumerate(upgrades):
-        upgrade_text = f"{upgrade['name']} (${upgrade['cost']})"
+        upgrade_text = f"{upgrade.name} (${upgrade.cost})"
         text_surface = font.render(upgrade_text, True, BLACK)
         option_rect = pygame.Rect(menu_x + 10, menu_y + 10 + i * 40, menu_width - 20, 30)
-        pygame.draw.rect(screen, GREEN if player_money >= upgrade['cost'] else RED, option_rect)
+        pygame.draw.rect(screen, GREEN if player_money >= upgrade.cost else RED, option_rect)
         pygame.draw.rect(screen, BLACK, option_rect, 2)
         screen.blit(
             text_surface,
@@ -264,6 +337,18 @@ def draw_ui(player_money, enemy_money):
     screen.blit(player_money_text, (330, 780))
     screen.blit(enemy_money_text, (10, 10))
 
+def upgrade_troop_health():
+    global TROOP_HEALTH
+    TROOP_HEALTH += 10
+    print(f"Troop health after upgrade: {TROOP_HEALTH}")
+
+def upgrade_troop_speed():
+    global TROOP_SPEED
+    TROOP_SPEED += 0.1
+
+def upgrade_troop_damage():
+    global TROOP_DAMAGE
+    TROOP_DAMAGE += 1
 
 # Game Loop
 def main():
@@ -280,7 +365,7 @@ def main():
     player_troops = []
     enemy_troops = []
 
-    player_money = 100
+    player_money = 5000
     enemy_money = 100
 
     buttons = [
@@ -290,67 +375,126 @@ def main():
         Button(10, 400, 30, 30, "B", lambda: "base"),
     ]
 
-    selected_entity = None  # Currently selected upgradeable entity
-    upgrade_options = []    # Options for the selected entity        # Tracks the position of the active menu
+    # Initialize the UpgradeSystem
+    upgrade_system = UpgradeSystem()
 
+    # Add upgrades for entities
+    # TOWER 1
+    upgrade_system.add_upgrade("tower1", Upgrade(
+        name="Health +50",
+        cost=50,
+        effect="Increases health by 50",
+        target="Tower1",
+        action=lambda: player_towers[0].apply_upgrade("health", player_money)
+    ))
+    upgrade_system.add_upgrade("tower1", Upgrade(
+        name="Attack Power +1",
+        cost=75,
+        effect="Increases attack power by 1",
+        target="Tower1",
+        action=lambda: player_towers[0].apply_upgrade("attack", player_money)
+    ))
+
+    #TOWER 2
+    upgrade_system.add_upgrade("tower2", Upgrade(
+    name="Health +50",
+    cost=50,
+    effect="Increases health by 50",
+    target="Tower1",
+    action=lambda: player_towers[0].apply_upgrade("health", player_money)
+    ))
+    upgrade_system.add_upgrade("tower2", Upgrade(
+        name="Attack Power +1",
+        cost=75,
+        effect="Increases attack power by 1",
+        target="Tower1",
+        action=lambda: player_towers[0].apply_upgrade("attack", player_money)
+    ))
+
+    #MAIN BASE
+    upgrade_system.add_upgrade("base", Upgrade(
+    name="Health +50",
+    cost=50,
+    effect="Increases health by 50",
+    target="Tower1",
+    action=lambda: player_towers[0].apply_upgrade("health", player_money)
+    ))
+    upgrade_system.add_upgrade("base", Upgrade(
+        name="Attack Power +1",
+        cost=75,
+        effect="Increases attack power by 1",
+        target="Tower1",
+        action=lambda: player_towers[0].apply_upgrade("attack", player_money)
+    ))
+
+    #TROOPS
+    upgrade_system.add_upgrade("troops", Upgrade(
+        name="Health +10",
+        cost=50,
+        effect="Increases troop health by 10",
+        target="Troops",
+        action=upgrade_troop_health  # Reference the global action function
+    ))
+    upgrade_system.add_upgrade("troops", Upgrade(
+        name="Speed +0.1",
+        cost=75,
+        effect="Increases troop speed by 0.1",
+        target="Troops",
+        action=upgrade_troop_speed  # Reference the global action function
+    ))
+    upgrade_system.add_upgrade("troops", Upgrade(
+        name="Damage +1",
+        cost=100,
+        effect="Increases troop damage by 1",
+        target="Troops",
+        action=upgrade_troop_damage  # Reference the global action function
+    ))
+
+
+    selected_entity = None  # Currently selected upgradeable entity
+    menu_open = False  # Track whether the menu is currently open
     running = True
     while running:
         screen.fill(BROWN)
         current_time = pygame.time.get_ticks()
         mouse_pos = pygame.mouse.get_pos()
-        mouse_pressed = pygame.mouse.get_pressed()
 
         # Event Handling
         for event in pygame.event.get():
             if event.type == pygame.QUIT:
                 running = False
 
-        # Handle button clicks
-        for button in buttons:
-            if button.is_clicked(mouse_pos, mouse_pressed):
-                selected_entity = button.callback()  # Select the corresponding entity
-                # Set upgrade options based on the selected entity
-                if selected_entity == "tower1":
-                    upgrade_options = player_towers[0].upgrades
-                elif selected_entity == "tower2":
-                    upgrade_options = player_towers[1].upgrades
-                elif selected_entity == "troops":
-                    upgrade_options = [
-                        {"name": "Health +10", "cost": 50, "action": "health"},
-                        {"name": "Spd +0.1", "cost": 75, "action": "speed"},
-                        {"name": "Dmg +1", "cost": 100, "action": "damage"},
-                    ]
-                elif selected_entity == "base":
-                    upgrade_options = player_towers[2].upgrades
+            # Handle clicks on buttons
+            if event.type == pygame.MOUSEBUTTONDOWN and event.button == 1:  # Left-click
+                print("Mouse clicked")  # Debug print
+                # Check if the menu is already open
+                if menu_open:
+                    # Check if the click is outside the menu to close it
+                    menu_x, menu_y, menu_width, menu_height = 150, 350, 200, len(upgrade_system.get_upgrades(selected_entity)) * 40 + 20
+                    menu_rect = pygame.Rect(menu_x, menu_y, menu_width, menu_height)
+                    if not menu_rect.collidepoint(event.pos):
+                        print("Closing menu")  # Debug print
+                        menu_open = False
+                        selected_entity = None
+                        continue
 
-        # Draw buttons
-        for button in buttons:
-            button.draw(screen, font)
+                # Check for button clicks
+                for button in buttons:
+                    if button.is_clicked(event.pos, (True, False, False)):
+                        selected_entity = button.callback()
+                        menu_open = True  # Open the menu for the selected entity
+                        print(f"Menu opened for {selected_entity}")  # Debug print
 
-        # Display the upgrade menu for the selected entity
-        if selected_entity:
-            options_rects = upgrade_menu(screen, upgrade_options, player_money)
-
-            # Handle menu interactions
-            if mouse_pressed[0]:  # Left click
-                for option_rect, upgrade in options_rects:
-                    if option_rect.collidepoint(mouse_pos):
-                        # Apply upgrade logic here
-                        if selected_entity.startswith("tower"):
-                            tower_index = int(selected_entity[-1]) - 1
-                            cost = player_towers[tower_index].apply_upgrade(upgrade["action"], player_money)
-                            if cost > 0:
-                                player_money -= cost
-                        elif selected_entity == "troops":
-                            if upgrade["action"] == "health" and player_money >= upgrade["cost"]:
-                                TROOP_HEALTH += 10
-                                player_money -= upgrade["cost"]
-                            elif upgrade["action"] == "speed" and player_money >= upgrade["cost"]:
-                                TROOP_SPEED += 0.1
-                                player_money -= upgrade["cost"]
-                            elif upgrade["action"] == "damage" and player_money >= upgrade["cost"]:
-                                TROOP_DAMAGE += 1
-                                player_money -= upgrade["cost"]
+                # Handle menu interactions
+                if menu_open and selected_entity:
+                    upgrades = upgrade_system.get_upgrades(selected_entity)
+                    options_rects = upgrade_menu(screen, upgrades, player_money)
+                    for option_rect, upgrade in options_rects:
+                        if option_rect.collidepoint(event.pos):  # Clicked an upgrade
+                            print(f"Upgrade selected: {upgrade.name}")  # Debug print
+                            player_money = upgrade_system.apply_upgrade(upgrade, player_money)
+                            print(f"Money left: {player_money}")  # Debug print
+                            break
 
         for tower in player_towers:
             tower.spawn_troop(player_troops, current_time)  # Player troops spawn from player towers
@@ -377,7 +521,7 @@ def main():
                     enemy_troop.start_attack()
 
                     # Reduce health
-                    player_troop.health -= 0.1
+                    player_troop.health -= TROOP_DAMAGE
                     enemy_troop.health -= 0.1
                     
             # Resume movement if no collisions occurred
@@ -415,6 +559,15 @@ def main():
         # Victory condition
         if any(base.health <= 0 for base in player_towers + enemy_towers if isinstance(base, Base)):
             running = False
+
+        # Draw buttons
+        for button in buttons:
+            button.draw(screen, font)
+
+        # Draw upgrade menu if open
+        if menu_open and selected_entity:
+            upgrades = upgrade_system.get_upgrades(selected_entity)
+            upgrade_menu(screen, upgrades, player_money)
 
         pygame.display.flip()
         clock.tick(FPS)
