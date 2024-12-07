@@ -24,9 +24,6 @@ BLUE = (0, 0, 255)
 # Game Variables
 TOWER_SIZE = 50
 BASE_SIZE = 100
-TROOP_SIZE = 10
-TROOP_SPEED = .5
-TROOP_HEALTH = 10
 TROOP_DAMAGE = .1
 MONEY_INCREMENT = 10
 
@@ -99,7 +96,7 @@ class Tower:
         """Spawn a troop at intervals specific to this tower."""
         if current_time - self.last_spawn_time > self.spawn_interval:
             x = self.rect.centerx
-            y = self.rect.top if not self.is_enemy else self.rect.bottom - TROOP_SIZE
+            y = self.rect.top if not self.is_enemy else self.rect.bottom - 10
             direction = -1 if self.is_enemy else 1
             troops.append(Troop(x, y, direction, self.is_enemy))
             self.last_spawn_time = current_time
@@ -130,13 +127,39 @@ class Troop:
         self.y = y
         self.direction = direction
         self.is_enemy = is_enemy
-        self.health = TROOP_HEALTH
-        self.max_health = TROOP_HEALTH  # For calculating percentage
-        self.size = TROOP_SIZE
-        self.speed = TROOP_SPEED 
+        self.health = 10
+        self.max_health = 10  # For calculating percentage
+        self.size = 10
+        self.speed = .5
+        self.attack_power = 1  # Damage per attack
         self.attacking = False  # Whether the troop is attacking
         self.attack_timer = 20  # Timer for the attack animation
         self.attack_phase = "retreat"  # "back" for retreat, "forward" for attack
+        self.upgrades = {
+            "health": {"value": 5, "cost": 50},
+            "speed": {"value": 0.1, "cost": 75},
+            "attack": {"value": 1, "cost": 100},
+        }
+
+    def apply_upgrade(self, upgrade, player_money):
+        """Apply an upgrade to this specific troop."""
+        if self.is_enemy:
+            return 0  # Enemy troops cannot be upgraded
+
+        if upgrade == "health" and player_money >= self.upgrades["health"]["cost"]:
+            self.max_health += self.upgrades["health"]["value"]
+            self.health = self.max_health  # Restore to max after upgrade
+            return self.upgrades["health"]["cost"]
+
+        elif upgrade == "speed" and player_money >= self.upgrades["speed"]["cost"]:
+            self.speed += self.upgrades["speed"]["value"]
+            return self.upgrades["speed"]["cost"]
+
+        elif upgrade == "attack" and player_money >= self.upgrades["attack"]["cost"]:
+            self.attack_power += self.upgrades["attack"]["value"]
+            return self.upgrades["attack"]["cost"]
+
+        return 0  # Return 0 if the upgrade can't be applied
 
     def draw_health_bar(self, screen):
         """Draw a health bar above the troop."""
@@ -159,13 +182,13 @@ class Troop:
         if self.attacking:
             # Perform attack animation
             if self.attack_phase == "retreat":
-                self.y += TROOP_SPEED * self.direction
+                self.y += self.speed * self.direction
                 self.attack_timer -= 1
                 if self.attack_timer <= 0:
                     self.attack_phase = "advance"
                     self.attack_timer = 100  # Reset timer for the next phase
             elif self.attack_phase == "advance":
-                self.y -= TROOP_SPEED * self.direction
+                self.y -= self.speed * self.direction
                 self.attack_timer -= 1
                 if self.attack_timer <= 0:
                     self.attack_phase = "retreat"
@@ -425,29 +448,28 @@ def main():
         action=lambda: player_towers[2].apply_upgrade("spawn_rate", player_money)
     ))
 
-
     #TROOPS
-    # upgrade_system.add_upgrade("troops", Upgrade(
-    #     name="Health +10",
-    #     cost=50,
-    #     effect="Increases troop health by 10",
-    #     target="Troops",
-    #     action=upgrade_troop_health  # Reference the global action function
-    # ))
-    # upgrade_system.add_upgrade("troops", Upgrade(
-    #     name="Speed +0.1",
-    #     cost=75,
-    #     effect="Increases troop speed by 0.1",
-    #     target="Troops",
-    #     action=upgrade_troop_damage
-    # ))
-    # upgrade_system.add_upgrade("troops", Upgrade(
-    #     name="Damage +1",
-    #     cost=100,
-    #     effect="Increases troop damage by 1",
-    #     target="Troops",
-    #     action=upgrade_troop_damage  # Reference the global action function
-    # ))
+    upgrade_system.add_upgrade("troops", Upgrade(
+        name="Health +5",
+        cost=50,
+        effect="Increases troop health by 5",
+        target="Trp",
+        action=lambda: [troop.apply_upgrade("health", player_money) for troop in player_troops]
+    ))
+    upgrade_system.add_upgrade("troops", Upgrade(
+        name="Speed +0.1",
+        cost=75,
+        effect="Increases troop speed by 0.1",
+        target="Trp",
+        action=lambda: [troop.apply_upgrade("speed", player_money) for troop in player_troops]
+    ))
+    upgrade_system.add_upgrade("troops", Upgrade(
+        name="Attack +1",
+        cost=100,
+        effect="Increases troop attack power by 1",
+        target="Trp",
+        action=lambda: [troop.apply_upgrade("attack", player_money) for troop in player_troops]
+    ))
 
 
     selected_entity = None  # Currently selected upgradeable entity
