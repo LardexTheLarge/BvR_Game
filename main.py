@@ -131,7 +131,7 @@ class Troop:
         self.max_health = 10  # For calculating percentage
         self.size = 10
         self.speed = .5
-        self.attack_power = 1  # Damage per attack
+        self.attack_power = .1  # Damage per attack
         self.attacking = False  # Whether the troop is attacking
         self.attack_timer = 20  # Timer for the attack animation
         self.attack_phase = "retreat"  # "back" for retreat, "forward" for attack
@@ -537,8 +537,8 @@ def main():
                     enemy_troop.start_attack()
 
                     # Reduce health
-                    player_troop.health -= TROOP_DAMAGE
-                    enemy_troop.health -= 0.1
+                    player_troop.health -= enemy_troop.attack_power
+                    enemy_troop.health -= player_troop.attack_power
                     
             # Resume movement if no collisions occurred
             if not player_collision:
