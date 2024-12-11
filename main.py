@@ -1,5 +1,6 @@
 import pygame
 import random
+import math
 
 # Initialize Pygame
 pygame.init()
@@ -24,7 +25,6 @@ BLUE = (0, 0, 255)
 # Game Variables
 TOWER_SIZE = 50
 BASE_SIZE = 100
-TROOP_DAMAGE = .1
 MONEY_INCREMENT = 10
 
 # Classes
@@ -177,24 +177,40 @@ class Troop:
         # Draw health (green)
         pygame.draw.rect(screen, GREEN, (bar_x, bar_y, green_width, bar_height))
 
-    def move(self, allies):
-        """Handle movement and attacking animation."""
-        if self.attacking:
-            # Perform attack animation
-            if self.attack_phase == "retreat":
-                self.y += self.speed * self.direction
-                self.attack_timer -= 1
-                if self.attack_timer <= 0:
-                    self.attack_phase = "advance"
-                    self.attack_timer = 100  # Reset timer for the next phase
-            elif self.attack_phase == "advance":
-                self.y -= self.speed * self.direction
-                self.attack_timer -= 1
-                if self.attack_timer <= 0:
-                    self.attack_phase = "retreat"
-                    self.attack_timer = 100  # Reset timer for the next phase
+    def move(self, allies, enemies):
+        """Handle movement, attacking animation, and radius-based targeting."""
+        detection_radius = 50  # Radius around the troop for targeting
+
+        # Check for enemies within the detection radius
+        for enemy in enemies:
+            distance = ((self.x - enemy.x) ** 2 + (self.y - enemy.y) ** 2) ** 0.5
+            if distance <= detection_radius:
+                self.target = enemy  # Target the enemy
+                break
         else:
-            # Regular movement when not attacking
+            self.target = None  # No enemy in radius, move normally
+
+        if self.target:
+            # Move towards the target or attack if close enough
+            dx = self.target.x - self.x
+            dy = self.target.y - self.y
+            distance_to_target = ((dx ** 2) + (dy ** 2)) ** 0.5
+
+            if distance_to_target > self.size:
+                # Move closer to the target
+                self.x += (dx / distance_to_target) * self.speed
+                self.y += (dy / distance_to_target) * self.speed
+            else:
+                # Start attacking when in range
+                self.start_attack()
+                self.target.health -= self.attack_power  # Reduce target's health
+
+            # Always avoid allies, even while targeting
+            self.avoid_allies(allies)
+        else:
+            # Default movement when no target is found
+            if self.attacking:
+                self.stop_attack()
             self.avoid_allies(allies)
             self.y -= self.speed * self.direction
 
@@ -202,10 +218,19 @@ class Troop:
         """Adjust horizontal position to avoid overlapping with allies."""
         for ally in allies:
             if ally != self and self.get_rect().colliderect(ally.get_rect()):
-                if self.x < ally.x:
-                    self.x -= 1  # Move left to avoid collision
+                print(f"Collision detected between {self} and {ally}")  # Debug
+                dx = self.x - ally.x
+                distance = abs(dx) if dx != 0 else 1
+                push = 1 / distance
+
+                if dx < 0:
+                    self.x -= push
                 else:
-                    self.x += 1  # Move right to avoid collision
+                    self.x += push
+
+                # Ensure troop stays within the lane boundary
+                print(f"Adjusted position: {self.x}")  # Debug
+
 
     def start_attack(self):
         """Start the attacking animation."""
@@ -233,6 +258,7 @@ class Troop:
 
         # Draw the health bar
         self.draw_health_bar(screen)
+        rect = self.get_rect()
     
     def get_rect(self):
         """Return a pygame.Rect for collision detection."""
@@ -520,11 +546,11 @@ def main():
 
         # Move player troops, checking for collisions with enemy troops
         for player_troop in player_troops:
-            player_troop.move(player_troops)
+            player_troop.move(player_troops, enemy_troops)
 
         # Move enemy troops, checking for collisions with player troops
         for enemy_troop in enemy_troops:
-            enemy_troop.move(enemy_troops)
+            enemy_troop.move(enemy_troops, player_troops)
 
         # Example collision handling in game loop
         for player_troop in player_troops:
@@ -532,13 +558,16 @@ def main():
             for enemy_troop in enemy_troops:
                 if player_troop.get_rect().colliderect(enemy_troop.get_rect()):
                     player_collision = True
-                    # Stop movement and initiate attack
-                    player_troop.start_attack()
-                    enemy_troop.start_attack()
 
                     # Reduce health
                     player_troop.health -= enemy_troop.attack_power
                     enemy_troop.health -= player_troop.attack_power
+
+                    # Stop movement and initiate attack
+                    player_troop.start_attack()
+                    enemy_troop.start_attack()
+
+                    
                     
             # Resume movement if no collisions occurred
             if not player_collision:
