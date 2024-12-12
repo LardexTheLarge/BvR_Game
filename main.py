@@ -135,6 +135,8 @@ class Troop:
         self.attacking = False  # Whether the troop is attacking
         self.attack_timer = 20  # Timer for the attack animation
         self.attack_phase = "retreat"  # "back" for retreat, "forward" for attack
+        self.target = None  # Current target (troop or structure)
+        self.waypoint = None  # Waypoint to move towards destroyed target's position
         self.upgrades = {
             "health": {"value": 5, "cost": 50},
             "speed": {"value": 0.1, "cost": 75},
@@ -177,36 +179,65 @@ class Troop:
         # Draw health (green)
         pygame.draw.rect(screen, GREEN, (bar_x, bar_y, green_width, bar_height))
 
-    def move(self, allies, enemies):
-        """Handle movement, attacking animation, and radius-based targeting."""
+    def move(self, allies, enemies, structures):
+        """Handle movement, attacking animation, and retargeting after structure destruction."""
         detection_radius = 50  # Radius around the troop for targeting
+
+        # If the current target is destroyed, set a waypoint at its position
+        if self.target and hasattr(self.target, "health") and hasattr(self.target, "rect") and self.target.health <= 0:
+            print(f"{self.target} destroyed, setting waypoint")  # Debug
+            self.waypoint = (self.target.rect.centerx, self.target.rect.centery)
+            self.target = None  # Clear the destroyed target
+
+        # If a waypoint exists, move toward it
+        if hasattr(self, "waypoint") and self.waypoint:
+            dx = self.waypoint[0] - self.x
+            dy = self.waypoint[1] - self.y
+            distance_to_waypoint = ((dx ** 2) + (dy ** 2)) ** 0.5
+
+            if distance_to_waypoint > self.size:
+                # Move closer to the waypoint
+                self.x += (dx / distance_to_waypoint) * self.speed
+                self.y += (dy / distance_to_waypoint) * self.speed
+                return  # Stop further processing until waypoint is reached
+            else:
+                # Waypoint reached, clear it
+                del self.waypoint
 
         # Check for enemies within the detection radius
         for enemy in enemies:
             distance = ((self.x - enemy.x) ** 2 + (self.y - enemy.y) ** 2) ** 0.5
             if distance <= detection_radius:
-                self.target = enemy  # Target the enemy
+                self.target = enemy  # Target the enemy troop
                 break
         else:
-            self.target = None  # No enemy in radius, move normally
+            # If no enemy troop is in range, check for structures
+            for structure in structures:
+                if structure.health > 0 and self.get_rect().colliderect(structure.rect):
+                    self.target = structure  # Target the structure
+                    break
+            else:
+                self.target = None  # No target found, move normally
 
         if self.target:
-            # Move towards the target or attack if close enough
-            dx = self.target.x - self.x
-            dy = self.target.y - self.y
-            distance_to_target = ((dx ** 2) + (dy ** 2)) ** 0.5
+            if isinstance(self.target, Troop):
+                # Logic for targeting troops
+                dx = self.target.x - self.x
+                dy = self.target.y - self.y
+                distance_to_target = ((dx ** 2) + (dy ** 2)) ** 0.5
 
-            if distance_to_target > self.size:
-                # Move closer to the target
-                self.x += (dx / distance_to_target) * self.speed
-                self.y += (dy / distance_to_target) * self.speed
-            else:
-                # Start attacking when in range
+                if distance_to_target > self.size:
+                    # Move closer to the target
+                    self.x += (dx / distance_to_target) * self.speed
+                    self.y += (dy / distance_to_target) * self.speed
+                else:
+                    # Start attacking when in range
+                    self.start_attack()
+                    self.target.health -= self.attack_power  # Reduce target's health
+            elif hasattr(self.target, "health"):  # Assume structures have health
+                # Stop moving and attack the structure
                 self.start_attack()
-                self.target.health -= self.attack_power  # Reduce target's health
-
-            # Always avoid allies, even while targeting
-            self.avoid_allies(allies)
+                self.target.health -= self.attack_power
         else:
             # Default movement when no target is found
             if self.attacking:
@@ -214,11 +245,13 @@ class Troop:
             self.avoid_allies(allies)
             self.y -= self.speed * self.direction
 
+
+
+
     def avoid_allies(self, allies):
         """Adjust horizontal position to avoid overlapping with allies."""
         for ally in allies:
             if ally != self and self.get_rect().colliderect(ally.get_rect()):
-                print(f"Collision detected between {self} and {ally}")  # Debug
                 dx = self.x - ally.x
                 distance = abs(dx) if dx != 0 else 1
                 push = 1 / distance
@@ -227,10 +260,6 @@ class Troop:
                     self.x -= push
                 else:
                     self.x += push
-
-                # Ensure troop stays within the lane boundary
-                print(f"Adjusted position: {self.x}")  # Debug
-
 
     def start_attack(self):
         """Start the attacking animation."""
@@ -546,11 +575,15 @@ def main():
 
         # Move player troops, checking for collisions with enemy troops
         for player_troop in player_troops:
-            player_troop.move(player_troops, enemy_troops)
+            player_troop.move(player_troops, enemy_troops, enemy_towers)
 
         # Move enemy troops, checking for collisions with player troops
         for enemy_troop in enemy_troops:
-            enemy_troop.move(enemy_troops, player_troops)
+            enemy_troop.move(enemy_troops, player_troops, player_towers)
+
+        # Remove destroyed towers
+        enemy_towers = [tower for tower in enemy_towers if tower.health > 0]
+        player_towers = [tower for tower in player_towers if tower.health > 0]
 
         # Example collision handling in game loop
         for player_troop in player_troops:
@@ -591,7 +624,6 @@ def main():
         # Remove dead troops
         player_troops = [troop for troop in player_troops if troop.health > 0]
         enemy_troops = [troop for troop in enemy_troops if troop.health > 0]
-
 
         # Draw everything
         for tower in player_towers + enemy_towers:
