@@ -2,6 +2,20 @@ import pygame
 import random
 import math
 
+        # if self.attack_phase == "retreat":
+        #     self.y += self.speed * self.direction
+        #     self.attack_timer -= 1
+        #     if self.attack_timer <= 0:
+        #         self.attack_phase = "advance"
+        #         self.attack_timer = 100  # Reset timer for the next phase
+        # elif self.attack_phase == "advance":
+        #     self.y -= self.speed * self.direction
+        #     self.attack_timer -= 1
+        #     if self.attack_timer <= 0:
+        #         self.attack_phase = "retreat"
+        #         self.attack_timer = 100  # Reset timer for the next phase
+        # self.attack_target()  # Continue attacking the target during animation
+
 # Initialize Pygame
 pygame.init()
 
@@ -179,72 +193,67 @@ class Troop:
         # Draw health (green)
         pygame.draw.rect(screen, GREEN, (bar_x, bar_y, green_width, bar_height))
 
-    def move(self, allies, enemies, structures):
-        """Handle movement, attacking animation, and retargeting after structure destruction."""
+    def move(self, allies, enemies, enemy_towers, base):
+        """Handle movement, attacking animation, and retargeting after tower destruction."""
         detection_radius = 50  # Radius around the troop for targeting
 
-        # If the current target is destroyed, set a waypoint at its position
-        if self.target and hasattr(self.target, "health") and hasattr(self.target, "rect") and self.target.health <= 0:
-            print(f"{self.target} destroyed, setting waypoint")  # Debug
-            self.waypoint = (self.target.rect.centerx, self.target.rect.centery)
+        # Call avoid_allies first to handle troop separation
+        self.avoid_allies(allies)
+
+        # Check if the current target is destroyed or invalid
+        if self.target and hasattr(self.target, "health") and self.target.health <= 0:
+            print(f"Target destroyed: {self.target}")  # Debug
             self.target = None  # Clear the destroyed target
 
-        # If a waypoint exists, move toward it
-        if hasattr(self, "waypoint") and self.waypoint:
-            dx = self.waypoint[0] - self.x
-            dy = self.waypoint[1] - self.y
-            distance_to_waypoint = ((dx ** 2) + (dy ** 2)) ** 0.5
-
-            if distance_to_waypoint > self.size:
-                # Move closer to the waypoint
-                self.x += (dx / distance_to_waypoint) * self.speed
-                self.y += (dy / distance_to_waypoint) * self.speed
-                return  # Stop further processing until waypoint is reached
-            else:
-                # Waypoint reached, clear it
-                del self.waypoint
-
-        # Check for enemies within the detection radius
-        for enemy in enemies:
-            distance = ((self.x - enemy.x) ** 2 + (self.y - enemy.y) ** 2) ** 0.5
-            if distance <= detection_radius:
-                self.target = enemy  # Target the enemy troop
-                break
-        else:
-            # If no enemy troop is in range, check for structures
-            for structure in structures:
-                if structure.health > 0 and self.get_rect().colliderect(structure.rect):
-                    self.target = structure  # Target the structure
+        # Retarget logic: Only retarget if no valid current target
+        if not self.target:
+            # Check for enemies within the detection radius
+            for enemy in enemies:
+                distance = ((self.x - enemy.x) ** 2 + (self.y - enemy.y) ** 2) ** 0.5
+                if distance <= detection_radius:
+                    self.target = enemy  # Target the enemy troop
                     break
             else:
-                self.target = None  # No target found, move normally
+                # No enemy troops nearby, target the corresponding structure
+                if self.x < SCREEN_WIDTH // 2:  # Troop is on the left side
+                    if enemy_towers[0].health > 0:  # Check left tower
+                        self.target = enemy_towers[0]
+                    elif base.health > 0:  # Target base if tower is destroyed
+                        self.target = base
+                else:  # Troop is on the right side
+                    if enemy_towers[1].health > 0:  # Check right tower
+                        self.target = enemy_towers[1]
+                    elif base.health > 0:  # Target base if tower is destroyed
+                        self.target = base
 
+        # Handle movement and attacking based on target type
         if self.target:
             if isinstance(self.target, Troop):
-                # Logic for targeting troops
+                # Logic for targeting enemy troops
                 dx = self.target.x - self.x
                 dy = self.target.y - self.y
-                distance_to_target = ((dx ** 2) + (dy ** 2)) ** 0.5
+            elif hasattr(self.target, "rect") and hasattr(self.target, "health"):  # Structures
+                # Logic for targeting towers or the base
+                dx = self.target.rect.centerx - self.x
+                dy = self.target.rect.centery - self.y
+            else:
+                dx, dy = 0, 0  # Safety fallback
 
-                if distance_to_target > self.size:
-                    # Move closer to the target
-                    self.x += (dx / distance_to_target) * self.speed
-                    self.y += (dy / distance_to_target) * self.speed
-                else:
-                    # Start attacking when in range
-                    self.start_attack()
-                    self.target.health -= self.attack_power  # Reduce target's health
-            elif hasattr(self.target, "health"):  # Assume structures have health
-                # Stop moving and attack the structure
+            distance_to_target = ((dx ** 2) + (dy ** 2)) ** 0.5
+
+            if distance_to_target > self.size:
+                # Move closer to the target
+                self.x += (dx / distance_to_target) * self.speed
+                self.y += (dy / distance_to_target) * self.speed
+            else:
+                # Start attacking when in range
                 self.start_attack()
-                self.target.health -= self.attack_power
+                self.target.health -= self.attack_power  # Reduce target's health
         else:
             # Default movement when no target is found
             if self.attacking:
                 self.stop_attack()
-            self.avoid_allies(allies)
             self.y -= self.speed * self.direction
-
 
 
 
@@ -531,6 +540,9 @@ def main():
     menu_open = False  # Track whether the menu is currently open
     running = True
     while running:
+        for i, tower in enumerate(enemy_towers):
+            print(f"enemy_towers[{i}] is a {type(tower).__name__}, health: {tower.health}")
+
         screen.fill(BROWN)
         current_time = pygame.time.get_ticks()
         mouse_pos = pygame.mouse.get_pos()
@@ -573,13 +585,25 @@ def main():
             tower.spawn_troop(enemy_troops, current_time)  # Enemy troops spawn from enemy towers
 
 
-        # Move player troops, checking for collisions with enemy troops
+        # Move player troops, checking for collisions with enemy troops and towers
         for player_troop in player_troops:
-            player_troop.move(player_troops, enemy_troops, enemy_towers)
+            player_troop.move(
+                allies=player_troops,
+                enemies=enemy_troops,
+                enemy_towers=enemy_towers[:2],  # Pass only the left and right towers
+                base=enemy_towers[2]
+    )
 
-        # Move enemy troops, checking for collisions with player troops
+        # Move enemy troops, checking for collisions with player troops and towers
         for enemy_troop in enemy_troops:
-            enemy_troop.move(enemy_troops, player_troops, player_towers)
+            enemy_troop.move(
+                allies=enemy_troops,
+                enemies=player_troops,
+                enemy_towers=player_towers[:2],  # Pass only the left and right towers
+                base=player_towers[2]
+            )
+
+            
 
         # Remove destroyed towers
         enemy_towers = [tower for tower in enemy_towers if tower.health > 0]
