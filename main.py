@@ -2,20 +2,6 @@ import pygame
 import random
 import math
 
-        # if self.attack_phase == "retreat":
-        #     self.y += self.speed * self.direction
-        #     self.attack_timer -= 1
-        #     if self.attack_timer <= 0:
-        #         self.attack_phase = "advance"
-        #         self.attack_timer = 100  # Reset timer for the next phase
-        # elif self.attack_phase == "advance":
-        #     self.y -= self.speed * self.direction
-        #     self.attack_timer -= 1
-        #     if self.attack_timer <= 0:
-        #         self.attack_phase = "retreat"
-        #         self.attack_timer = 100  # Reset timer for the next phase
-        # self.attack_target()  # Continue attacking the target during animation
-
 # Initialize Pygame
 pygame.init()
 
@@ -193,67 +179,58 @@ class Troop:
         # Draw health (green)
         pygame.draw.rect(screen, GREEN, (bar_x, bar_y, green_width, bar_height))
 
-    def move(self, allies, enemies, enemy_towers, base):
-        """Handle movement, attacking animation, and retargeting after tower destruction."""
-        detection_radius = 50  # Radius around the troop for targeting
+    def target_enemy(self, enemies):
+        """
+        Determine the target for the troop based on proximity to enemy troops.
+        """
+        detection_radius = 50  # Radius for detecting enemy troops
 
-        # Call avoid_allies first to handle troop separation
+        # Prioritize enemy troops within detection radius
+        for enemy in enemies:
+            distance = math.hypot(self.x - enemy.x, self.y - enemy.y)
+            if distance <= detection_radius:
+                return enemy  # Return the first enemy troop in range
+
+        return None  # No valid troop targets
+
+    def move(self, allies, enemies):
+        """
+        Handle movement and attacking based on troop targeting.
+        """
+        # Separate from allies
         self.avoid_allies(allies)
 
-        # Check if the current target is destroyed or invalid
+        # Retarget if the current target is invalid or destroyed
         if self.target and hasattr(self.target, "health") and self.target.health <= 0:
             print(f"Target destroyed: {self.target}")  # Debug
-            self.target = None  # Clear the destroyed target
+            self.target = None
 
-        # Retarget logic: Only retarget if no valid current target
+        # Select a new target if none exists
         if not self.target:
-            # Check for enemies within the detection radius
-            for enemy in enemies:
-                distance = ((self.x - enemy.x) ** 2 + (self.y - enemy.y) ** 2) ** 0.5
-                if distance <= detection_radius:
-                    self.target = enemy  # Target the enemy troop
-                    break
-            else:
-                # No enemy troops nearby, target the corresponding structure
-                if self.x < SCREEN_WIDTH // 2:  # Troop is on the left side
-                    if enemy_towers[0].health > 0:  # Check left tower
-                        self.target = enemy_towers[0]
-                    elif base.health > 0:  # Target base if tower is destroyed
-                        self.target = base
-                else:  # Troop is on the right side
-                    if enemy_towers[1].health > 0:  # Check right tower
-                        self.target = enemy_towers[1]
-                    elif base.health > 0:  # Target base if tower is destroyed
-                        self.target = base
+            self.target = self.target_enemy(enemies)
 
-        # Handle movement and attacking based on target type
+        # Handle movement and attacking
         if self.target:
-            if isinstance(self.target, Troop):
-                # Logic for targeting enemy troops
-                dx = self.target.x - self.x
-                dy = self.target.y - self.y
-            elif hasattr(self.target, "rect") and hasattr(self.target, "health"):  # Structures
-                # Logic for targeting towers or the base
-                dx = self.target.rect.centerx - self.x
-                dy = self.target.rect.centery - self.y
-            else:
-                dx, dy = 0, 0  # Safety fallback
+            dx, dy = self.target.x - self.x, self.target.y - self.y
+            distance_to_target = math.hypot(dx, dy)
 
-            distance_to_target = ((dx ** 2) + (dy ** 2)) ** 0.5
-
-            if distance_to_target > self.size:
+            if distance_to_target > self.size:  # If not in range
                 # Move closer to the target
                 self.x += (dx / distance_to_target) * self.speed
                 self.y += (dy / distance_to_target) * self.speed
+                if self.attacking:  # Stop attacking if moving
+                    self.stop_attack()
             else:
-                # Start attacking when in range
-                self.start_attack()
-                self.target.health -= self.attack_power  # Reduce target's health
+                # Attack the target when in range
+                if not self.attacking:  # Start attacking if not already doing so
+                    self.start_attack()
+                self.animate_attack()  # Animate the attack
+                self.target.health -= self.attack_power  # Reduce the target's health
         else:
-            # Default movement when no target is found
+            # No valid target; move forward
             if self.attacking:
                 self.stop_attack()
-            self.y -= self.speed * self.direction
+            self.y -= self.speed * self.direction  # Default movement
 
 
 
@@ -270,12 +247,29 @@ class Troop:
                 else:
                     self.x += push
 
+    def animate_attack(self):
+        """
+        Handle the attack animation by toggling between 'retreat' and 'advance' phases.
+        """
+        if self.attack_phase == "retreat":
+            self.y += self.speed * self.direction  # Move backward slightly
+            self.attack_timer -= 1
+            if self.attack_timer <= 0:
+                self.attack_phase = "advance"  # Switch to the 'advance' phase
+                self.attack_timer = 20  # Reset timer for the next phase
+        elif self.attack_phase == "advance":
+            self.y -= self.speed * self.direction  # Move forward slightly
+            self.attack_timer -= 1
+            if self.attack_timer <= 0:
+                self.attack_phase = "retreat"  # Switch to the 'retreat' phase
+                self.attack_timer = 20  # Reset timer for the next phase
+
     def start_attack(self):
         """Start the attacking animation."""
         if not self.attacking:  # Prevent re-initializing
             self.attacking = True
             self.attack_phase = "retreat"
-            self.attack_timer = 100  # Adjust for retreat duration
+            self.attack_timer = 10  # Adjust for retreat duration
 
     def stop_attack(self):
         """Stop the attacking animation."""
@@ -590,8 +584,6 @@ def main():
             player_troop.move(
                 allies=player_troops,
                 enemies=enemy_troops,
-                enemy_towers=enemy_towers[:2],  # Pass only the left and right towers
-                base=enemy_towers[2]
     )
 
         # Move enemy troops, checking for collisions with player troops and towers
@@ -599,8 +591,6 @@ def main():
             enemy_troop.move(
                 allies=enemy_troops,
                 enemies=player_troops,
-                enemy_towers=player_towers[:2],  # Pass only the left and right towers
-                base=player_towers[2]
             )
 
             
