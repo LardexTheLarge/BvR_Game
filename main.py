@@ -29,11 +29,12 @@ MONEY_INCREMENT = 10
 
 # Classes
 class Tower:
-    def __init__(self, x, y, is_enemy=False):
+    def __init__(self, x, y, id=None, is_enemy=False):
         self.rect = pygame.Rect(x, y, TOWER_SIZE, TOWER_SIZE)
         self.health = 100
         self.max_health = 100  # For percentage calculation
         self.is_enemy = is_enemy
+        self.id = id  # Unique identifier for the tower
         self.spawn_interval = 2000 # in milliseconds
         self.attack_power = 1    
         self.last_spawn_time = pygame.time.get_ticks()  # Track last spawn time
@@ -109,16 +110,17 @@ class Tower:
 
 
 class Base(Tower):  # Base extends Tower for simplicity
-    def __init__(self, x, y, is_enemy=False):
-        super().__init__(x, y, is_enemy)
+    def __init__(self, x, y, id=None, is_enemy=False):
+        super().__init__(x, y, id=id, is_enemy=is_enemy)
         self.health = 200  # Bases have more health
         self.max_health = 200  # For percentage calculation
+        self.id = id  # Unique identifier for the tower
 
 
-    def draw(self):
-        pygame.draw.rect(screen, RED if self.is_enemy else BLUE, self.rect)
-        # Draw health bar
-        self.draw_health_bar(screen)
+    # def draw(self):
+    #     pygame.draw.rect(screen, RED if self.is_enemy else BLUE, self.rect)
+    #     # Draw health bar
+    #     self.draw_health_bar(screen)
 
 
 class Troop:
@@ -183,7 +185,7 @@ class Troop:
         """
         Determine the target for the troop based on proximity to enemy troops.
         """
-        detection_radius = 50  # Radius for detecting enemy troops
+        detection_radius = 20  # Radius for detecting enemy troops
 
         # Prioritize enemy troops within detection radius
         for enemy in enemies:
@@ -193,9 +195,21 @@ class Troop:
 
         return None  # No valid troop targets
 
-    def move(self, allies, enemies):
+    def target_matching_tower(self, enemy_towers, allied_tower_id):
         """
-        Handle movement and attacking based on troop targeting.
+        Target the enemy tower with the same ID as the allied tower.
+        :param enemy_towers: List of enemy towers.
+        :param allied_tower_id: ID of the allied tower this troop belongs to.
+        :return: The matching enemy tower, or None if no match exists.
+        """
+        for tower in enemy_towers:
+            if tower.id == allied_tower_id and tower.health > 0:
+                return tower
+        return None  # No valid tower found
+
+    def move(self, allies, enemies, enemy_towers, allied_tower_id):
+        """
+        Handle movement and attacking based on troop targeting, prioritizing enemy troops.
         """
         # Separate from allies
         self.avoid_allies(allies)
@@ -205,13 +219,23 @@ class Troop:
             print(f"Target destroyed: {self.target}")  # Debug
             self.target = None
 
-        # Select a new target if none exists
+        # Always prioritize enemy troops within range
+        self.target = self.target_enemy(enemies)
+
+        # If no enemy troops are available, target the corresponding enemy tower
         if not self.target:
-            self.target = self.target_enemy(enemies)
+            self.target = self.target_matching_tower(enemy_towers, allied_tower_id)
 
         # Handle movement and attacking
         if self.target:
-            dx, dy = self.target.x - self.x, self.target.y - self.y
+            if isinstance(self.target, Troop):  # If target is an enemy troop
+                dx, dy = self.target.x - self.x, self.target.y - self.y
+            elif isinstance(self.target, Tower):  # If target is a tower
+                dx = self.target.rect.centerx - self.x
+                dy = self.target.rect.centery - self.y
+            else:
+                dx, dy = 0, 0  # Fallback for safety
+
             distance_to_target = math.hypot(dx, dy)
 
             if distance_to_target > self.size:  # If not in range
@@ -230,8 +254,7 @@ class Troop:
             # No valid target; move forward
             if self.attacking:
                 self.stop_attack()
-            self.y -= self.speed * self.direction  # Default movement
-
+            self.y += self.speed * self.direction  # Default movement
 
 
     def avoid_allies(self, allies):
@@ -411,14 +434,14 @@ def draw_ui(player_money, enemy_money):
 # Game Loop
 def main():
     player_towers = [
-        Tower(50, SCREEN_HEIGHT - 150),
-        Tower(400, SCREEN_HEIGHT - 150),
-        Base(SCREEN_WIDTH // 2 - BASE_SIZE // 4, SCREEN_HEIGHT - BASE_SIZE),
+        Tower(50, SCREEN_HEIGHT - 150, id=1),
+        Tower(400, SCREEN_HEIGHT - 150, id=2),
+        Base(SCREEN_WIDTH // 2 - BASE_SIZE // 4, SCREEN_HEIGHT - BASE_SIZE, id=3),
     ]
     enemy_towers = [
-        Tower(50, 100, is_enemy=True),
-        Tower(400, 100, is_enemy=True),
-        Base(SCREEN_WIDTH // 2 - BASE_SIZE // 4, 50, is_enemy=True),
+        Tower(50, 100, is_enemy=True, id=1),
+        Tower(400, 100, is_enemy=True, id=2),
+        Base(SCREEN_WIDTH // 2 - BASE_SIZE // 4, 50, id=3, is_enemy=True),
     ]
     player_troops = []
     enemy_troops = []
@@ -580,20 +603,24 @@ def main():
 
 
         # Move player troops, checking for collisions with enemy troops and towers
-        for player_troop in player_troops:
+        for i, player_troop in enumerate(player_troops):
+            allied_tower_id = player_towers[i % len(player_towers)].id  # Assign corresponding allied tower ID
             player_troop.move(
                 allies=player_troops,
                 enemies=enemy_troops,
-    )
+                enemy_towers=enemy_towers,
+                allied_tower_id=allied_tower_id
+            )
 
         # Move enemy troops, checking for collisions with player troops and towers
-        for enemy_troop in enemy_troops:
+        for i, enemy_troop in enumerate(enemy_troops):
+            allied_tower_id = enemy_towers[i % len(enemy_towers)].id  # Assign corresponding allied tower ID
             enemy_troop.move(
                 allies=enemy_troops,
                 enemies=player_troops,
+                enemy_towers=player_towers,
+                allied_tower_id=allied_tower_id
             )
-
-            
 
         # Remove destroyed towers
         enemy_towers = [tower for tower in enemy_towers if tower.health > 0]
