@@ -36,7 +36,7 @@ class Tower:
         self.is_enemy = is_enemy
         self.id = id  # Unique identifier for the tower
         self.spawn_interval = 2000 # in milliseconds
-        self.attack_power = 1    
+        self.attack_power = 1
         self.last_spawn_time = pygame.time.get_ticks()  # Track last spawn time
         self.upgrades = {
             "health": {"value": 50, "cost": 50},
@@ -117,12 +117,6 @@ class Base(Tower):  # Base extends Tower for simplicity
         self.id = id  # Unique identifier for the tower
 
 
-    # def draw(self):
-    #     pygame.draw.rect(screen, RED if self.is_enemy else BLUE, self.rect)
-    #     # Draw health bar
-    #     self.draw_health_bar(screen)
-
-
 class Troop:
     def __init__(self, x, y, direction, is_enemy=False):
         self.x = x
@@ -171,7 +165,7 @@ class Troop:
         bar_height = 5
         health_percentage = self.health / self.max_health
         green_width = int(bar_width * health_percentage)
-        
+
         # Bar position
         bar_x = self.x - bar_width // 2
         bar_y = self.y - self.size // 2 - bar_height - 10
@@ -183,48 +177,67 @@ class Troop:
 
     def target_enemy(self, enemies):
         """
-        Determine the target for the troop based on proximity to enemy troops.
+        Determine the nearest enemy troop within a reasonable range.
         """
-        detection_radius = 20  # Radius for detecting enemy troops
+        detection_radius = 50  # Increase detection radius
+        nearest_enemy = None
+        min_distance = float('inf')
 
-        # Prioritize enemy troops within detection radius
         for enemy in enemies:
             distance = math.hypot(self.x - enemy.x, self.y - enemy.y)
-            if distance <= detection_radius:
-                return enemy  # Return the first enemy troop in range
+            if distance <= detection_radius and distance < min_distance:
+                nearest_enemy = enemy
+                min_distance = distance
 
-        return None  # No valid troop targets
+        if nearest_enemy:
+            print(f"Troop at ({self.x}, {self.y}) targeting enemy troop at ({nearest_enemy.x}, {nearest_enemy.y}).")
+        else:
+            print(f"Troop at ({self.x}, {self.y}) found no enemies within range.")
 
-    def target_matching_tower(self, enemy_towers, allied_tower_id):
+        return nearest_enemy
+
+
+    def target_tower(self, enemy_towers):
         """
-        Target the enemy tower with the same ID as the allied tower.
-        :param enemy_towers: List of enemy towers.
-        :param allied_tower_id: ID of the allied tower this troop belongs to.
-        :return: The matching enemy tower, or None if no match exists.
+        Determine the nearest enemy tower within a certain range.
         """
+        detection_radius = 200  # Adjust range for detecting towers
+        nearest_tower = None
+        min_distance = float('inf')
+
         for tower in enemy_towers:
-            if tower.id == allied_tower_id and tower.health > 0:
-                return tower
-        return None  # No valid tower found
+            if tower.health > 0:  # Only consider alive towers
+                distance = math.hypot(self.x - tower.rect.centerx, self.y - tower.rect.centery)
+                if distance <= detection_radius and distance < min_distance:
+                    nearest_tower = tower
+                    min_distance = distance
+
+        return nearest_tower  # Return the nearest valid tower or None
+
 
     def move(self, allies, enemies, enemy_towers, allied_tower_id):
         """
         Handle movement and attacking based on troop targeting, prioritizing enemy troops.
+
         """
         # Separate from allies
         self.avoid_allies(allies)
 
         # Retarget if the current target is invalid or destroyed
         if self.target and hasattr(self.target, "health") and self.target.health <= 0:
-            print(f"Target destroyed: {self.target}")  # Debug
+            print(f"Target destroyed: {self.target}")
             self.target = None
 
-        # Always prioritize enemy troops within range
-        self.target = self.target_enemy(enemies)
-
-        # If no enemy troops are available, target the corresponding enemy tower
-        if not self.target:
-            self.target = self.target_matching_tower(enemy_towers, allied_tower_id)
+        # Prioritize targeting enemy troops
+        if not self.target or isinstance(self.target, Tower):
+            troop_target = self.target_enemy(enemies)
+            if troop_target:
+                self.target = troop_target
+            else:
+                # If no enemy troops are in range, check for towers in range
+                tower_target = self.target_tower(enemy_towers)
+                if tower_target:
+                    self.target = tower_target
 
         # Handle movement and attacking
         if self.target:
@@ -254,7 +267,7 @@ class Troop:
             # No valid target; move forward
             if self.attacking:
                 self.stop_attack()
-            self.y += self.speed * self.direction  # Default movement
+            self.y -= self.speed * self.direction  # Default movement
 
 
     def avoid_allies(self, allies):
@@ -314,7 +327,7 @@ class Troop:
         # Draw the health bar
         self.draw_health_bar(screen)
         rect = self.get_rect()
-    
+
     def get_rect(self):
         """Return a pygame.Rect for collision detection."""
         if self.is_enemy:
@@ -430,7 +443,7 @@ def draw_ui(player_money, enemy_money):
     enemy_money_text = font.render(f"Enemy Money: ${enemy_money}", True, WHITE)
     screen.blit(player_money_text, (330, 780))
     screen.blit(enemy_money_text, (10, 10))
-    
+
 # Game Loop
 def main():
     player_towers = [
@@ -557,8 +570,6 @@ def main():
     menu_open = False  # Track whether the menu is currently open
     running = True
     while running:
-        for i, tower in enumerate(enemy_towers):
-            print(f"enemy_towers[{i}] is a {type(tower).__name__}, health: {tower.health}")
 
         screen.fill(BROWN)
         current_time = pygame.time.get_ticks()
@@ -641,8 +652,8 @@ def main():
                     player_troop.start_attack()
                     enemy_troop.start_attack()
 
-                    
-                    
+
+
             # Resume movement if no collisions occurred
             if not player_collision:
                 player_troop.stop_attack()
