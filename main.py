@@ -185,21 +185,18 @@ class Troop:
 
         for enemy in enemies:
             distance = math.hypot(self.x - enemy.x, self.y - enemy.y)
-            if distance <= detection_radius and distance < min_distance:
-                nearest_enemy = enemy
-                min_distance = distance
+            if distance <= detection_radius:
+                return enemy  # Return the first enemy troop in range
 
-        return nearest_enemy
+        return None  # No valid troop targets
 
-
-    def target_tower(self, enemy_towers):
+    def target_matching_tower(self, enemy_towers, allied_tower_id):
         """
-        Determine the nearest enemy tower within a certain range.
+        Target the enemy tower with the same ID as the allied tower.
+        :param enemy_towers: List of enemy towers.
+        :param allied_tower_id: ID of the allied tower this troop belongs to.
+        :return: The matching enemy tower, or None if no match exists.
         """
-        detection_radius = 200  # Adjust range for detecting towers
-        nearest_tower = None
-        min_distance = float('inf')
-
         for tower in enemy_towers:
             if tower.health > 0:  # Only consider alive towers
                 distance = math.hypot(self.x - tower.rect.centerx, self.y - tower.rect.centery)
@@ -220,6 +217,7 @@ class Troop:
 
         # Retarget if the current target is invalid or destroyed
         if self.target and hasattr(self.target, "health") and self.target.health <= 0:
+            print(f"Target destroyed: {self.target}")  # Debug
             self.target = None
 
         # Prioritize targeting enemy troops
