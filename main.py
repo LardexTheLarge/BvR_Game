@@ -189,11 +189,6 @@ class Troop:
                 nearest_enemy = enemy
                 min_distance = distance
 
-        if nearest_enemy:
-            print(f"Troop at ({self.x}, {self.y}) targeting enemy troop at ({nearest_enemy.x}, {nearest_enemy.y}).")
-        else:
-            print(f"Troop at ({self.x}, {self.y}) found no enemies within range.")
-
         return nearest_enemy
 
 
@@ -225,7 +220,6 @@ class Troop:
 
         # Retarget if the current target is invalid or destroyed
         if self.target and hasattr(self.target, "health") and self.target.health <= 0:
-            print(f"Target destroyed: {self.target}")
             self.target = None
 
         # Prioritize targeting enemy troops
@@ -686,8 +680,17 @@ def main():
         draw_ui(player_money, enemy_money)
 
         # Victory condition
-        if any(base.health <= 0 for base in player_towers + enemy_towers if isinstance(base, Base)):
-            running = False
+        player_base = next((base for base in player_towers if isinstance(base, Base)), None)
+        enemy_base = next((base for base in enemy_towers if isinstance(base, Base)), None)
+
+        if enemy_base is None or (enemy_base.health <= 0 if enemy_base else False):
+            print("Victory! The enemy's base has been destroyed.")
+            running = False  # End the game
+
+        if player_base is None or (player_base.health <= 0 if player_base else False):
+            print("Defeat! Your base has been destroyed.")
+            running = False  # End the game
+
 
         # Draw buttons
         for button in buttons:
