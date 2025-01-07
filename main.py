@@ -132,7 +132,6 @@ class Troop:
         self.attack_timer = 20  # Timer for the attack animation
         self.attack_phase = "retreat"  # "back" for retreat, "forward" for attack
         self.target = None  # Current target (troop or structure)
-        self.waypoint = None  # Waypoint to move towards destroyed target's position
         self.upgrades = {
             "health": {"value": 5, "cost": 50},
             "speed": {"value": 0.1, "cost": 75},
@@ -190,13 +189,14 @@ class Troop:
 
         return None  # No valid troop targets
 
-    def target_matching_tower(self, enemy_towers, allied_tower_id):
+    def target_tower(self, enemy_towers):
         """
-        Target the enemy tower with the same ID as the allied tower.
-        :param enemy_towers: List of enemy towers.
-        :param allied_tower_id: ID of the allied tower this troop belongs to.
-        :return: The matching enemy tower, or None if no match exists.
+        Determine the nearest enemy tower within a certain range.
         """
+        detection_radius = 200  # Adjust range for detecting towers
+        nearest_tower = None
+        min_distance = float('inf')
+
         for tower in enemy_towers:
             if tower.health > 0:  # Only consider alive towers
                 distance = math.hypot(self.x - tower.rect.centerx, self.y - tower.rect.centery)
@@ -207,7 +207,7 @@ class Troop:
         return nearest_tower  # Return the nearest valid tower or None
 
 
-    def move(self, allies, enemies, enemy_towers, allied_tower_id):
+    def move(self, allies, enemies, enemy_towers):
         """
         Handle movement and attacking based on troop targeting, prioritizing enemy troops.
 
@@ -439,14 +439,14 @@ def draw_ui(player_money, enemy_money):
 # Game Loop
 def main():
     player_towers = [
-        Tower(50, SCREEN_HEIGHT - 150, id=1),
-        Tower(400, SCREEN_HEIGHT - 150, id=2),
-        Base(SCREEN_WIDTH // 2 - BASE_SIZE // 4, SCREEN_HEIGHT - BASE_SIZE, id=3),
+        Tower(50, SCREEN_HEIGHT - 150),
+        Tower(400, SCREEN_HEIGHT - 150),
+        Base(SCREEN_WIDTH // 2 - BASE_SIZE // 4, SCREEN_HEIGHT - BASE_SIZE),
     ]
     enemy_towers = [
-        Tower(50, 100, is_enemy=True, id=1),
-        Tower(400, 100, is_enemy=True, id=2),
-        Base(SCREEN_WIDTH // 2 - BASE_SIZE // 4, 50, id=3, is_enemy=True),
+        Tower(50, 100, is_enemy=True),
+        Tower(400, 100, is_enemy=True),
+        Base(SCREEN_WIDTH // 2 - BASE_SIZE // 4, 50, is_enemy=True),
     ]
     player_troops = []
     enemy_troops = []
@@ -607,22 +607,18 @@ def main():
 
         # Move player troops, checking for collisions with enemy troops and towers
         for i, player_troop in enumerate(player_troops):
-            allied_tower_id = player_towers[i % len(player_towers)].id  # Assign corresponding allied tower ID
             player_troop.move(
                 allies=player_troops,
                 enemies=enemy_troops,
-                enemy_towers=enemy_towers,
-                allied_tower_id=allied_tower_id
+                enemy_towers=enemy_towers
             )
 
         # Move enemy troops, checking for collisions with player troops and towers
         for i, enemy_troop in enumerate(enemy_troops):
-            allied_tower_id = enemy_towers[i % len(enemy_towers)].id  # Assign corresponding allied tower ID
             enemy_troop.move(
                 allies=enemy_troops,
                 enemies=player_troops,
-                enemy_towers=player_towers,
-                allied_tower_id=allied_tower_id
+                enemy_towers=player_towers
             )
 
         # Remove destroyed towers
