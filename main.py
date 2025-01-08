@@ -14,6 +14,13 @@ pygame.display.set_caption("Blue vs Red")
 clock = pygame.time.Clock()
 font = pygame.font.Font(None, 26)
 
+
+#Sounds
+hit_sound = pygame.mixer.Sound("./assets/sounds/hit_1.MP3")
+hit_sound2 = pygame.mixer.Sound("./assets/sounds/hit_2.MP3")
+hit_sound.set_volume(0.1)
+hit_sound2.set_volume(0.3)
+
 # Colors
 WHITE = (255, 255, 255)
 BROWN = (150,75,0)
@@ -179,8 +186,6 @@ class Troop:
         Determine the nearest enemy troop within a reasonable range.
         """
         detection_radius = 50  # Increase detection radius
-        nearest_enemy = None
-        min_distance = float('inf')
 
         for enemy in enemies:
             distance = math.hypot(self.x - enemy.x, self.y - enemy.y)
@@ -212,6 +217,13 @@ class Troop:
         Handle movement and attacking based on troop targeting, prioritizing enemy troops.
 
         """
+
+        # Add an attribute to track the last time the sound was played
+        if not hasattr(self, "last_hit_sound_time"):
+            self.last_hit_sound_time = 0  # Initialize on first use
+
+        cooldown = 500  # Cooldown in milliseconds (adjust as needed)
+
         # Separate from allies
         self.avoid_allies(allies)
 
@@ -255,6 +267,11 @@ class Troop:
                     self.start_attack()
                 self.animate_attack()  # Animate the attack
                 self.target.health -= self.attack_power  # Reduce the target's health
+                # Play hit sound with a cooldown
+                current_time = pygame.time.get_ticks()
+                if current_time - self.last_hit_sound_time >= cooldown:
+                    hit_sound.play()
+                    self.last_hit_sound_time = current_time  # Update the last play time
         else:
             # No valid target; move forward
             if self.attacking:
@@ -438,6 +455,18 @@ def draw_ui(player_money, enemy_money):
 
 # Game Loop
 def main():
+    # Initialize Pygame's mixer for music
+    pygame.mixer.init()
+
+    # Load the music file
+    pygame.mixer.music.load("./assets/sounds/El Bosque Sombrío.mp3")  # Replace with your music file's path
+
+    # Set the volume (optional)
+    pygame.mixer.music.set_volume(0.2)  # Volume level (0.0 to 1.0)
+
+    # Play the music in a loop
+    pygame.mixer.music.play(-1)
+
     player_towers = [
         Tower(50, SCREEN_HEIGHT - 150),
         Tower(400, SCREEN_HEIGHT - 150),
