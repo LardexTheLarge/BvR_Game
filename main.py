@@ -2,6 +2,8 @@ import pygame
 import random
 import math
 
+
+
 # Initialize Pygame
 pygame.init()
 
@@ -418,6 +420,7 @@ class UpgradeSystem:
             upgrade.action()  # Execute the upgrade's logic (e.g., `tower.apply_upgrade`)
             return player_money - upgrade.cost  # Deduct the cost
         return player_money  # No deduction if insufficient funds
+
 
 # Functions
 def upgrade_menu(screen, upgrades, player_money):
