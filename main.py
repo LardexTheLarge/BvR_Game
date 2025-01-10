@@ -61,7 +61,9 @@ class AudioManager:
             region_name=os.environ.get('AWS_REGION')
         )
         self.audio_cache = {}  # Dictionary to cache loaded sounds
-        self.temp_dir = tempfile.mkdtemp()  # Create a temporary directory for storing downloaded files
+
+        self.temp_dir = os.path.join(os.path.dirname(__file__))
+        os.makedirs(self.temp_dir, exist_ok=True)  # Create the directory if it doesn't exist
 
         # Initialize Pygame's mixer for audio playback
         pygame.mixer.init()
@@ -73,8 +75,6 @@ class AudioManager:
         Returns the local file path or None if there's an error.
         """
         local_path = os.path.join(self.temp_dir, os.path.basename(s3_key))  # Define local save path
-
-        print(f"Bucket: {self.bucket_name}, S3 Key: {s3_key}, Local Path: {local_path}")
 
         try:
             self.s3_client.download_file(self.bucket_name, s3_key, local_path)  # Download file from S3
@@ -226,7 +226,7 @@ class Base(Tower):  # Base extends Tower for simplicity
 
 
 class Troop:
-    def __init__(self, x, y, direction, is_enemy=False):
+    def __init__(self, x, y, direction, is_enemy=False, audio_manager=None):
         self.x = x
         self.y = y
         self.direction = direction
@@ -240,11 +240,21 @@ class Troop:
         self.attack_timer = 20  # Timer for the attack animation
         self.attack_phase = "retreat"  # "back" for retreat, "forward" for attack
         self.target = None  # Current target (troop or structure)
+        self.audio_manager = audio_manager  # Reference to the global audio manager
+        self.hit_sound = None  # Cached sound
         self.upgrades = {
             "health": {"value": 5, "cost": 50},
             "speed": {"value": 0.1, "cost": 75},
             "attack": {"value": 1, "cost": 100},
         }
+
+        if self.audio_manager:
+            self.hit_sound = self.audio_manager.load_sound('hit_1.MP3')
+            self.hit_sound.set_volume(0.7)  # Adjust volume level (0.0 to 1.0)
+
+        # Cooldown management
+        self.last_hit_sound_time = 0
+        self.sound_cooldown = 500  # Cooldown in milliseconds
 
     def apply_upgrade(self, upgrade, player_money):
         """Apply an upgrade to this specific troop."""
@@ -318,23 +328,11 @@ class Troop:
         Handle movement and attacking based on troop targeting, prioritizing enemy troops.
 
         """
-        # Initialize the audio manager
-        audio_manager = AudioManager('bvr-game')
-        # Load sound effects
-        hit_sound = audio_manager.load_sound('hit_1.MP3')
-
-        # Add an attribute to track the last time the sound was played
-        if not hasattr(self, "last_hit_sound_time"):
-            self.last_hit_sound_time = 0  # Initialize on first use
-
-        cooldown = 500  # Cooldown in milliseconds (adjust as needed)
-
         # Separate from allies
         self.avoid_allies(allies)
 
         # Retarget if the current target is invalid or destroyed
         if self.target and hasattr(self.target, "health") and self.target.health <= 0:
-            print(f"Target destroyed: {self.target}")  # Debug
             self.target = None
 
         # Prioritize targeting enemy troops
@@ -372,11 +370,18 @@ class Troop:
                     self.start_attack()
                 self.animate_attack()  # Animate the attack
                 self.target.health -= self.attack_power  # Reduce the target's health
+                
+            if self.hit_sound and self.target:
                 # Play hit sound with a cooldown
                 current_time = pygame.time.get_ticks()
-                if current_time - self.last_hit_sound_time >= cooldown:
-                    hit_sound.play()
+                if current_time - self.last_hit_sound_time >= self.sound_cooldown and self.hit_sound:
+                    print("Playing hit sound...")  # Debug log
+                    self.hit_sound.play()
                     self.last_hit_sound_time = current_time  # Update the last play time
+                else:
+                    print("Hit sound on cooldown.")  # Debug log
+            else:
+                print("No target or hit sound not loaded.")  # Debug log
         else:
             # No valid target; move forward
             if self.attacking:
@@ -564,26 +569,18 @@ def main():
     # Initialize the audio manager
     audio_manager = AudioManager('bvr-game')
 
+    # Preload hit sound
+    audio_manager.load_sound('hit_1.MP3')
+
     # Load and play background music
     audio_manager.load_music('El Bosque Sombrío.mp3')
     audio_manager.play_music(-1)
+    pygame.mixer.music.set_volume(0.5)
 
     # When quitting the game
     audio_manager.stop_music()
     pygame.mixer.stop()
-    audio_manager.cleanup()
-
-    # # Initialize Pygame's mixer for music
-    # pygame.mixer.init()
-
-    # # Load the music file
-    # pygame.mixer.music.load("./assets/sounds/El Bosque Sombrío.mp3")  # Replace with your music file's path
-
-    # # Set the volume (optional)
-    # pygame.mixer.music.set_volume(0.2)  # Volume level (0.0 to 1.0)
-
-    # # Play the music in a loop
-    # pygame.mixer.music.play(-1)
+    # audio_manager.cleanup()
 
     player_towers = [
         Tower(50, SCREEN_HEIGHT - 150),
