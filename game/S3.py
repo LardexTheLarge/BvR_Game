@@ -27,9 +27,9 @@ def upload_audio_to_s3(local_file_path, bucket_name, s3_key):
         print(f"Error uploading file: {e}")
         return False
 
-upload_audio_to_s3("./assets/audio/sfx/hit_1.MP3", "bvr-game", "hit_1.MP3")
-upload_audio_to_s3("./assets/audio/sfx/hit_1.MP3", "bvr-game", "hit_2.MP3")
-upload_audio_to_s3("./assets/audio/music/hit_1.MP3", "bvr-game", "El Bosque Sombrío.mp3")
+upload_audio_to_s3("C:/Users/Lardex/Desktop/Projects/Pygame/BvR_Game/assets/audio/sfx/hit_1.MP3", "bvr-game", "hit_1.MP3")
+upload_audio_to_s3("C:/Users/Lardex/Desktop/Projects/Pygame/BvR_Game/assets/audio/sfx/hit_2.MP3", "bvr-game", "hit_2.MP3")
+upload_audio_to_s3("C:/Users/Lardex/Desktop/Projects/Pygame/BvR_Game/assets/audio/music/El Bosque Sombrío.mp3", "bvr-game", "El Bosque Sombrío.mp3")
 
 class AudioManager:
     def __init__(self, bucket_name):
@@ -47,7 +47,7 @@ class AudioManager:
         )
         self.audio_cache = {}  # Dictionary to cache loaded sounds
         self.temp_dir = tempfile.mkdtemp()  # Create a temporary directory for storing downloaded files
-        
+
         # Initialize Pygame's mixer for audio playback
         pygame.mixer.init()
 
@@ -58,7 +58,7 @@ class AudioManager:
         Returns the local file path or None if there's an error.
         """
         local_path = os.path.join(self.temp_dir, os.path.basename(s3_key))  # Define local save path
-        
+
         try:
             self.s3_client.download_file(self.bucket_name, s3_key, local_path)  # Download file from S3
             return local_path  # Return the local file path
@@ -117,19 +117,19 @@ class AudioManager:
 
 
 
-# Initialize the audio manager
-audio_manager = AudioManager('my-game-assets-bucket')
+# # Initialize the audio manager
+# audio_manager = AudioManager('bvr-game')
 
-# Load and play background music
-audio_manager.load_music('audio/music/background_music.mp3')
-audio_manager.play_music()
+# # Load and play background music
+# audio_manager.load_music('audio/music/background_music.mp3')
+# audio_manager.play_music()
 
-# Load sound effects
-hit_sound = audio_manager.load_sound('audio/sfx/hit_sound.wav')
+# # Load sound effects
+# hit_sound = audio_manager.load_sound('audio/sfx/hit_sound.wav')
 
-# Play sound effects when needed
-hit_sound.play()
+# # Play sound effects when needed
+# hit_sound.play()
 
-# When quitting the game
-audio_manager.stop_music()
-audio_manager.cleanup()
+# # When quitting the game
+# audio_manager.stop_music()
+# audio_manager.cleanup()

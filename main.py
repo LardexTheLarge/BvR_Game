@@ -1,11 +1,17 @@
 import pygame
 import random
 import math
-
+import boto3
+import os
+import tempfile
+from botocore.exceptions import ClientError
+from dotenv import load_dotenv
 
 
 # Initialize Pygame
 pygame.init()
+load_dotenv()
+
 
 # Screen dimensions and settings
 SCREEN_WIDTH = 500
@@ -18,10 +24,13 @@ font = pygame.font.Font(None, 26)
 
 
 #Sounds
-hit_sound = pygame.mixer.Sound("./assets/sounds/hit_1.MP3")
-hit_sound2 = pygame.mixer.Sound("./assets/sounds/hit_2.MP3")
-hit_sound.set_volume(0.1)
-hit_sound2.set_volume(0.3)
+# hit_sound = pygame.mixer.Sound("./assets/sounds/hit_1.MP3")
+# hit_sound2 = pygame.mixer.Sound("./assets/sounds/hit_2.MP3")
+# hit_sound.set_volume(0.1)
+# hit_sound2.set_volume(0.3)
+aws_access_key = os.environ['AWS_ACCESS_KEY_ID']
+aws_secret_key = os.environ['AWS_SECRET_ACCESS_KEY']
+aws_region = os.environ['AWS_REGION']
 
 # Colors
 WHITE = (255, 255, 255)
@@ -37,6 +46,96 @@ BASE_SIZE = 100
 MONEY_INCREMENT = 10
 
 # Classes
+class AudioManager:
+    def __init__(self, bucket_name):
+        """
+        Initialize the AudioManager.
+        - Connects to an AWS S3 bucket to download audio files.
+        - Sets up Pygame's mixer for playing audio.
+        - Creates a temporary directory to store downloaded files.
+        """
+        self.bucket_name = bucket_name  # Name of the S3 bucket to fetch audio from
+        self.s3_client = boto3.client('s3',  # Initialize S3 client using boto3
+            aws_access_key_id=os.environ.get('AWS_ACCESS_KEY_ID'),  # AWS credentials from environment variables
+            aws_secret_access_key=os.environ.get('AWS_SECRET_ACCESS_KEY'),
+            region_name=os.environ.get('AWS_REGION')
+        )
+        self.audio_cache = {}  # Dictionary to cache loaded sounds
+        self.temp_dir = tempfile.mkdtemp()  # Create a temporary directory for storing downloaded files
+
+        # Initialize Pygame's mixer for audio playback
+        pygame.mixer.init()
+
+    def download_audio(self, s3_key):
+        """
+        Download an audio file from S3 and save it locally.
+        - s3_key: Path of the audio file in the S3 bucket.
+        Returns the local file path or None if there's an error.
+        """
+        local_path = os.path.join(self.temp_dir, os.path.basename(s3_key))  # Define local save path
+
+        print(f"Bucket: {self.bucket_name}, S3 Key: {s3_key}, Local Path: {local_path}")
+
+        try:
+            self.s3_client.download_file(self.bucket_name, s3_key, local_path)  # Download file from S3
+            return local_path  # Return the local file path
+        except ClientError as e:  # Handle download errors
+            print(f"Error downloading audio: {e}")
+            return None  # Return None if download fails
+
+    def load_sound(self, s3_key):
+        """
+        Load a sound effect from S3 into the Pygame mixer.
+        - s3_key: Path of the audio file in the S3 bucket.
+        Returns the Pygame Sound object or None if there's an error.
+        """
+        if s3_key in self.audio_cache:  # Check if the sound is already cached
+            return self.audio_cache[s3_key]
+
+        local_path = self.download_audio(s3_key)  # Download the file if not cached
+        if local_path:
+            sound = pygame.mixer.Sound(local_path)  # Load the sound into Pygame
+            self.audio_cache[s3_key] = sound  # Cache the loaded sound
+            return sound
+        return None  # Return None if loading fails
+
+    def load_music(self, s3_key):
+        """
+        Load a background music file from S3 into the Pygame mixer.
+        - s3_key: Path of the audio file in the S3 bucket.
+        Returns True if the music is loaded successfully, False otherwise.
+        """
+        local_path = self.download_audio(s3_key)  # Download the file
+        if local_path:
+            pygame.mixer.music.load(local_path)  # Load the music into the mixer
+            return True
+        return False
+
+    def play_music(self, loops=-1):
+        """
+        Play the loaded background music.
+        - loops: Number of times to loop the music (-1 for infinite loop).
+        """
+        pygame.mixer.music.play(loops)
+
+    def stop_music(self):
+        """Stop the currently playing background music."""
+        pygame.mixer.music.stop()
+
+    def cleanup(self):
+        """
+        Clean up temporary files created during execution.
+        - Deletes the temporary directory and all its contents.
+        """
+        import shutil
+
+        # Stop and unload the music to release the file lock
+        pygame.mixer.music.stop()
+        pygame.mixer.music.unload()  # Unloads the currently loaded music file
+
+        shutil.rmtree(self.temp_dir)  # Remove the temporary directory and its contents
+
+
 class Tower:
     def __init__(self, x, y, id=None, is_enemy=False):
         self.rect = pygame.Rect(x, y, TOWER_SIZE, TOWER_SIZE)
@@ -219,6 +318,10 @@ class Troop:
         Handle movement and attacking based on troop targeting, prioritizing enemy troops.
 
         """
+        # Initialize the audio manager
+        audio_manager = AudioManager('bvr-game')
+        # Load sound effects
+        hit_sound = audio_manager.load_sound('hit_1.MP3')
 
         # Add an attribute to track the last time the sound was played
         if not hasattr(self, "last_hit_sound_time"):
@@ -458,17 +561,29 @@ def draw_ui(player_money, enemy_money):
 
 # Game Loop
 def main():
-    # Initialize Pygame's mixer for music
-    pygame.mixer.init()
+    # Initialize the audio manager
+    audio_manager = AudioManager('bvr-game')
 
-    # Load the music file
-    pygame.mixer.music.load("./assets/sounds/El Bosque Sombrío.mp3")  # Replace with your music file's path
+    # Load and play background music
+    audio_manager.load_music('El Bosque Sombrío.mp3')
+    audio_manager.play_music(-1)
 
-    # Set the volume (optional)
-    pygame.mixer.music.set_volume(0.2)  # Volume level (0.0 to 1.0)
+    # When quitting the game
+    audio_manager.stop_music()
+    pygame.mixer.stop()
+    audio_manager.cleanup()
 
-    # Play the music in a loop
-    pygame.mixer.music.play(-1)
+    # # Initialize Pygame's mixer for music
+    # pygame.mixer.init()
+
+    # # Load the music file
+    # pygame.mixer.music.load("./assets/sounds/El Bosque Sombrío.mp3")  # Replace with your music file's path
+
+    # # Set the volume (optional)
+    # pygame.mixer.music.set_volume(0.2)  # Volume level (0.0 to 1.0)
+
+    # # Play the music in a loop
+    # pygame.mixer.music.play(-1)
 
     player_towers = [
         Tower(50, SCREEN_HEIGHT - 150),
